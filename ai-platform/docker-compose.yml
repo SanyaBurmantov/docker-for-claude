@@ -1,0 +1,104 @@
+services:
+  proxy-gateway:
+    build: ./proxy-gateway
+    image: ai-proxy-gateway
+    container_name: ai-gateway
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    ports:
+      - "6080:6080"
+    environment:
+      - PROXY_HOST=${PROXY_HOST}
+      - PROXY_PORT=${PROXY_PORT}
+      - PROXY_USER=${PROXY_USER}
+      - PROXY_PASS=${PROXY_PASS}
+    networks:
+      - proxy-net
+    restart: unless-stopped
+
+  claude-container:
+    build: ./claude-container
+    image: ai-claude
+    container_name: ai-claude
+    network_mode: "service:proxy-gateway"
+    depends_on:
+      proxy-gateway:
+        condition: service_started
+    environment:
+      - HTTP_PROXY=http://${PROXY_USER}:${PROXY_PASS}@${PROXY_HOST}:${PROXY_PORT}
+      - HTTPS_PROXY=http://${PROXY_USER}:${PROXY_PASS}@${PROXY_HOST}:${PROXY_PORT}
+      - NO_PROXY=localhost,127.0.0.1
+    volumes:
+      - ${PROJECTS_DIR}:/workspace
+      - claude-auth:/home/claude/.claude
+    stdin_open: true
+    tty: true
+    restart: unless-stopped
+
+  browser-container:
+    build: ./browser-container
+    image: ai-browser
+    container_name: ai-browser
+    network_mode: "service:proxy-gateway"
+    depends_on:
+      proxy-gateway:
+        condition: service_started
+    environment:
+      - PROXY_HOST=${PROXY_HOST}
+      - PROXY_PORT=${PROXY_PORT}
+      - VNC_PASSWORD=${VNC_PASSWORD:-claude}
+    volumes:
+      - browser-profile:/home/claude/.mozilla
+      - browser-config:/home/claude/.config
+    stdin_open: true
+    tty: true
+    restart: unless-stopped
+
+  backend:
+    build: ./backend
+    image: ai-backend
+    container_name: ai-backend
+    ports:
+      - "3000:3000"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ${PROJECTS_DIR}:/workspace
+    environment:
+      - PORT=3000
+      - CLAUDE_CONTAINER=ai-claude
+      - BROWSER_CONTAINER=ai-browser
+    depends_on:
+      claude-container:
+        condition: service_started
+      browser-container:
+        condition: service_started
+    networks:
+      - app-net
+    restart: unless-stopped
+
+  frontend:
+    build: ./frontend
+    image: ai-frontend
+    container_name: ai-frontend
+    ports:
+      - "8080:80"
+    depends_on:
+      - backend
+    networks:
+      - app-net
+    restart: unless-stopped
+
+volumes:
+  claude-auth:
+    driver: local
+  browser-profile:
+    driver: local
+  browser-config:
+    driver: local
+
+networks:
+  proxy-net:
+    driver: bridge
+  app-net:
+    driver: bridge
