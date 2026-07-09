@@ -1,20 +1,49 @@
 import type { WebSocket } from 'ws';
-import { spawn, type ChildProcess } from 'child_process';
+import * as pty from 'node-pty';
+import { tmuxSessionName, UTF8_EXEC_ENV } from '../services/dockerService';
+import { isValidProjectName } from '../services/projectService';
 
 interface TerminalMessage {
-  type: 'input';
-  data: string;
+  type: 'input' | 'resize';
+  data?: string;
+  cols?: number;
+  rows?: number;
 }
 
-export function handleTerminalWebSocket(ws: WebSocket, sessionId: string): void {
-  const prefix = 'claude-';
-  const projectName = sessionId.startsWith(prefix) ? sessionId.slice(prefix.length) : sessionId;
+const CONTAINER_NAME = process.env.CLAUDE_CONTAINER || 'ai-claude';
 
-  let child: ChildProcess | null = null;
+export function handleTerminalWebSocket(ws: WebSocket, sessionId: string): void {
+  let kind: 'claude' | 'shell' = 'claude';
+  let projectName = sessionId;
+  if (sessionId.startsWith('claude-')) {
+    projectName = sessionId.slice('claude-'.length);
+  } else if (sessionId.startsWith('shell-')) {
+    kind = 'shell';
+    projectName = sessionId.slice('shell-'.length);
+  }
+
+  if (!isValidProjectName(projectName)) {
+    ws.send(JSON.stringify({ type: 'error', data: 'Invalid session id' }));
+    ws.close();
+    return;
+  }
+
+  // Claude tab: attach to the session started via the API (plain shell if it is gone).
+  // Shell tab: attach-or-create a persistent tmux shell session in the project dir.
+  const shellCmd =
+    kind === 'claude'
+      ? `cd /workspace/${projectName} 2>/dev/null; tmux attach-session -t ${tmuxSessionName(projectName)} 2>/dev/null || exec bash -i`
+      : `cd /workspace/${projectName} 2>/dev/null; exec tmux new-session -A -s ${tmuxSessionName(projectName, 'shell')}`;
+
+  let term: pty.IPty | null = null;
 
   try {
-    child = spawn('docker', ['exec', '-i', 'ai-claude', 'script', '-q', '-c', 'bash -i', '/dev/null'], {
-      stdio: ['pipe', 'pipe', 'pipe'],
+    // UTF8_EXEC_ENV is what lets readline echo typed Cyrillic; in the C locale bash
+    // mangles the leading byte of every multi-byte character.
+    term = pty.spawn('docker', ['exec', '-it', ...UTF8_EXEC_ENV, CONTAINER_NAME, 'bash', '-c', shellCmd], {
+      name: 'xterm-256color',
+      cols: 80,
+      rows: 24,
     });
   } catch (err) {
     ws.send(JSON.stringify({ type: 'error', data: `Failed to exec: ${err}` }));
@@ -22,61 +51,40 @@ export function handleTerminalWebSocket(ws: WebSocket, sessionId: string): void 
     return;
   }
 
-  if (child.stdout) {
-    child.stdout.on('data', (data: Buffer) => {
-      if (ws.readyState === ws.OPEN) {
-        ws.send(JSON.stringify({ type: 'output', data: data.toString() }));
-      }
-    });
-  }
+  term.onData((data: string) => {
+    if (ws.readyState === ws.OPEN) {
+      ws.send(JSON.stringify({ type: 'output', data }));
+    }
+  });
 
-  if (child.stderr) {
-    child.stderr.on('data', (data: Buffer) => {
-      if (ws.readyState === ws.OPEN) {
-        ws.send(JSON.stringify({ type: 'output', data: data.toString() }));
-      }
-    });
-  }
-
-  child.on('exit', () => {
+  term.onExit(() => {
+    term = null;
     if (ws.readyState === ws.OPEN) {
       ws.close();
     }
   });
 
-  child.on('error', (err) => {
-    ws.send(JSON.stringify({ type: 'error', data: `Process error: ${err.message}` }));
-  });
-
-  setTimeout(() => {
-    if (child?.stdin?.writable) {
-      child.stdin.write(`cd /workspace/${projectName} 2>/dev/null\n`);
-    }
-  }, 300);
-
   ws.on('message', (raw: Buffer | string) => {
-    if (!child?.stdin?.writable) return;
+    if (!term) return;
     try {
       const msg: TerminalMessage = JSON.parse(raw.toString());
-      if (msg.type === 'input') {
-        child.stdin.write(msg.data);
+      if (msg.type === 'input' && typeof msg.data === 'string') {
+        term.write(msg.data);
+      } else if (msg.type === 'resize' && msg.cols && msg.rows) {
+        term.resize(Math.max(2, Math.floor(msg.cols)), Math.max(2, Math.floor(msg.rows)));
       }
     } catch {
-      child.stdin.write(raw.toString());
+      term.write(raw.toString());
     }
   });
 
-  ws.on('close', () => {
-    if (child) {
-      try { child.kill(); } catch { /* ignore */ }
-      child = null;
+  const killTerm = () => {
+    if (term) {
+      try { term.kill(); } catch { /* ignore */ }
+      term = null;
     }
-  });
+  };
 
-  ws.on('error', () => {
-    if (child) {
-      try { child.kill(); } catch { /* ignore */ }
-      child = null;
-    }
-  });
+  ws.on('close', killTerm);
+  ws.on('error', killTerm);
 }

@@ -7,7 +7,7 @@ services:
       - NET_ADMIN
       - NET_RAW
     ports:
-      - "6080:6080"
+      - "9901:6080"
     environment:
       - PROXY_HOST=${PROXY_HOST}
       - PROXY_PORT=${PROXY_PORT}
@@ -15,6 +15,13 @@ services:
       - PROXY_PASS=${PROXY_PASS}
     networks:
       - proxy-net
+    healthcheck:
+      # kill switch rules present AND redsocks listening on 12345 (0x3039)
+      test: ["CMD-SHELL", "iptables -t nat -S OUTPUT | grep -q REDSOCKS && grep -q ':3039' /proc/net/tcp"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 5s
     restart: unless-stopped
 
   claude-container:
@@ -24,7 +31,7 @@ services:
     network_mode: "service:proxy-gateway"
     depends_on:
       proxy-gateway:
-        condition: service_started
+        condition: service_healthy
     environment:
       - HTTP_PROXY=http://${PROXY_USER}:${PROXY_PASS}@${PROXY_HOST}:${PROXY_PORT}
       - HTTPS_PROXY=http://${PROXY_USER}:${PROXY_PASS}@${PROXY_HOST}:${PROXY_PORT}
@@ -43,7 +50,7 @@ services:
     network_mode: "service:proxy-gateway"
     depends_on:
       proxy-gateway:
-        condition: service_started
+        condition: service_healthy
     environment:
       - PROXY_HOST=${PROXY_HOST}
       - PROXY_PORT=${PROXY_PORT}
@@ -59,8 +66,6 @@ services:
     build: ./backend
     image: ai-backend
     container_name: ai-backend
-    ports:
-      - "3000:3000"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ${PROJECTS_DIR}:/workspace
@@ -81,8 +86,11 @@ services:
     build: ./frontend
     image: ai-frontend
     container_name: ai-frontend
+    environment:
+      - UI_USER=${UI_USER:-admin}
+      - UI_PASSWORD=${UI_PASSWORD:-}
     ports:
-      - "8080:80"
+      - "9900:80"
     depends_on:
       - backend
     networks:

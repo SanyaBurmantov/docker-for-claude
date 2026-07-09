@@ -1,31 +1,30 @@
-import { DiffEditor } from '@monaco-editor/react'
-
 interface DiffViewerProps {
-  original: string
-  modified: string
-  language?: string
+  diff: string
 }
 
-export default function DiffViewer({ original, modified, language = 'plaintext' }: DiffViewerProps) {
-  if (!original && !modified) {
+function lineClass(line: string): string {
+  if (line.startsWith('+++') || line.startsWith('---')) return 'diff-line diff-file'
+  if (line.startsWith('diff ') || line.startsWith('index ')) return 'diff-line diff-meta'
+  if (line.startsWith('@@')) return 'diff-line diff-hunk'
+  if (line.startsWith('+')) return 'diff-line diff-add'
+  if (line.startsWith('-')) return 'diff-line diff-del'
+  return 'diff-line'
+}
+
+export default function DiffViewer({ diff }: DiffViewerProps) {
+  if (!diff.trim()) {
     return <div className="no-changes">No changes detected</div>
   }
 
   return (
     <div className="diff-container">
-      <DiffEditor
-        original={original}
-        modified={modified}
-        language={language}
-        theme="vs-dark"
-        options={{
-          readOnly: true,
-          minimap: { enabled: false },
-          scrollBeyondLastLine: false,
-          fontSize: 13,
-        } as any}
-        height="100%"
-      />
+      <pre className="diff-view">
+        {diff.split('\n').map((line, i) => (
+          <div key={i} className={lineClass(line)}>
+            {line || ' '}
+          </div>
+        ))}
+      </pre>
     </div>
   )
 }

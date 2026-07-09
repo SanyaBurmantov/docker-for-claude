@@ -7,6 +7,7 @@ import { handleTerminalWebSocket } from './routes/terminal';
 import projectsRouter from './routes/projects';
 import sessionsRouter from './routes/sessions';
 import gitRouter from './routes/git';
+import systemRouter from './routes/system';
 
 const app = express();
 const PORT = parseInt(process.env.PORT || '3000', 10);
@@ -18,6 +19,7 @@ app.use(morgan('dev'));
 app.use('/api/projects', projectsRouter);
 app.use('/api/projects/:id/session', sessionsRouter);
 app.use('/api/projects/:id/git', gitRouter);
+app.use('/api/system', systemRouter);
 
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok' });

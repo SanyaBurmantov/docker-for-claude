@@ -1,24 +1,7 @@
 #!/bin/bash
 
-if [ -n "$PROXY_HOST" ] && [ -n "$PROXY_PORT" ]; then
-    echo "Configuring Firefox proxy settings..."
-    mkdir -p /opt/firefox/distribution
-    cat > /opt/firefox/distribution/policies.json << EOF
-{
-  "policies": {
-    "Proxy": {
-      "Mode": "manual",
-      "HTTPProxy": "${PROXY_HOST}:${PROXY_PORT}",
-      "SSLProxy": "${PROXY_HOST}:${PROXY_PORT}",
-      "Passthrough": "localhost,127.0.0.1",
-      "UseProxyForDNS": true
-    },
-    "BlockAboutConfig": false,
-    "DisableSecurity": false
-  }
-}
-EOF
-fi
+# No manual Firefox proxy config: the gateway (redsocks + iptables) transparently
+# routes all traffic through the authenticated proxy, so Firefox works out of the box.
 
 echo "Starting Xvfb..."
 Xvfb :0 -screen 0 1920x1080x24 &

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, useCallback } from 'react'
 
 interface UseWebSocketResult {
   send: (data: string) => void
+  sendResize: (cols: number, rows: number) => void
   isConnected: boolean
   error: string | null
 }
@@ -86,5 +87,11 @@ export function useWebSocket(
     }
   }, [])
 
-  return { send, isConnected, error }
+  const sendResize = useCallback((cols: number, rows: number) => {
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ type: 'resize', cols, rows }))
+    }
+  }, [])
+
+  return { send, sendResize, isConnected, error }
 }

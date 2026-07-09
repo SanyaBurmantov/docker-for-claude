@@ -3,28 +3,35 @@ import { spawn, execSync } from 'child_process';
 
 export const docker = new Dockerode({ socketPath: '/var/run/docker.sock' });
 
+// The image sets these too, but `docker exec` into a container built before that
+// change still lands in the C locale, where bash mangles non-ASCII input.
+// Passing them per-exec makes UTF-8 independent of when the image was built.
+export const UTF8_EXEC_ENV = ['-e', 'LANG=C.UTF-8', '-e', 'LC_ALL=C.UTF-8'];
+
 export async function execInContainer(containerName: string, cmd: string): Promise<string> {
   return new Promise((resolve, reject) => {
-    const child = spawn('docker', ['exec', containerName, 'bash', '-c', cmd], {
+    const child = spawn('docker', ['exec', ...UTF8_EXEC_ENV, containerName, 'bash', '-c', cmd], {
       stdio: ['pipe', 'pipe', 'pipe'],
     });
 
-    let stdout = '';
-    let stderr = '';
+    // Chunk boundaries land on arbitrary byte offsets, so decoding each chunk on its
+    // own tears multi-byte characters in half and yields U+FFFD. Decode once, at the end.
+    const stdout: Buffer[] = [];
+    const stderr: Buffer[] = [];
 
     child.stdout.on('data', (data: Buffer) => {
-      stdout += data.toString();
+      stdout.push(data);
     });
 
     child.stderr.on('data', (data: Buffer) => {
-      stderr += data.toString();
+      stderr.push(data);
     });
 
     child.on('close', (code: number | null) => {
       if (code === 0) {
-        resolve(stdout.trimEnd());
+        resolve(Buffer.concat(stdout).toString('utf-8').trimEnd());
       } else {
-        reject(new Error(stderr.trimEnd() || `Exit code ${code}`));
+        reject(new Error(Buffer.concat(stderr).toString('utf-8').trimEnd() || `Exit code ${code}`));
       }
     });
 
@@ -36,15 +43,21 @@ export async function execInContainer(containerName: string, cmd: string): Promi
 
 export function execInContainerSync(containerName: string, cmd: string): string {
   try {
-    return execSync(`docker exec ${containerName} bash -c ${JSON.stringify(cmd)}`, {
-      encoding: 'utf-8',
-    }).trimEnd();
+    return execSync(
+      `docker exec ${UTF8_EXEC_ENV.join(' ')} ${containerName} bash -c ${JSON.stringify(cmd)}`,
+      { encoding: 'utf-8' }
+    ).trimEnd();
   } catch (err: unknown) {
     if (err instanceof Error) {
       throw err;
     }
     throw new Error(String(err));
   }
+}
+
+// tmux session names cannot contain '.' or ':' (they are target delimiters)
+export function tmuxSessionName(projectName: string, prefix: string = 'claude'): string {
+  return `${prefix}-${projectName.replace(/[^A-Za-z0-9_-]/g, '_')}`;
 }
 
 export async function containerExists(containerName: string): Promise<boolean> {

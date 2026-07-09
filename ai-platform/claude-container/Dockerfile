@@ -3,9 +3,15 @@ FROM ubuntu:24.04
 ENV DEBIAN_FRONTEND=noninteractive
 ENV TZ=UTC
 
+# ubuntu:24.04 leaves LANG unset, so everything here runs in the C locale, where a
+# byte above 0x7F is not a character. Typing "привет" at a bash prompt echoes back
+# corrupted because readline mangles the leading byte of each multi-byte sequence.
+# glibc ships C.UTF-8 built in, so no locales package or locale-gen is needed.
+ENV LANG=C.UTF-8
+ENV LC_ALL=C.UTF-8
+
 RUN apt-get update && apt-get install -y \
     curl ca-certificates gnupg sudo git vim tmux \
-    nodejs npm \
     xz-utils \
     && rm -rf /var/lib/apt/lists/*
 

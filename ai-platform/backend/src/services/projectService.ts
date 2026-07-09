@@ -126,28 +126,45 @@ async function countFiles(dir: string): Promise<number> {
   return count;
 }
 
-export function isPathSafe(base: string, target: string): boolean {
-  const resolved = path.resolve(base, target);
-  return resolved.startsWith(base);
+export function isValidProjectName(name: string): boolean {
+  return /^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(name) && !name.includes('..');
 }
 
-export async function listFilesRecursive(dir: string, baseDir: string = dir): Promise<string[]> {
-  const files: string[] = [];
+export function isPathSafe(base: string, target: string): boolean {
+  const resolved = path.resolve(base, target);
+  return resolved === base || resolved.startsWith(base + path.sep);
+}
+
+export interface FileNode {
+  name: string;
+  path: string;
+  type: 'file' | 'directory';
+  children?: FileNode[];
+}
+
+export async function listFilesRecursive(dir: string, baseDir: string = dir): Promise<FileNode[]> {
+  const nodes: FileNode[] = [];
   const entries = await fs.readdir(dir, { withFileTypes: true });
 
   for (const entry of entries) {
     if (entry.name === 'node_modules' || entry.name === '.git' || entry.name === 'dist' || entry.name === '.next') continue;
 
     const fullPath = path.join(dir, entry.name);
+    const relPath = path.relative(baseDir, fullPath);
     if (entry.isDirectory()) {
-      const subFiles = await listFilesRecursive(fullPath, baseDir);
-      files.push(...subFiles);
+      nodes.push({
+        name: entry.name,
+        path: relPath,
+        type: 'directory',
+        children: await listFilesRecursive(fullPath, baseDir),
+      });
     } else {
-      files.push(path.relative(baseDir, fullPath));
+      nodes.push({ name: entry.name, path: relPath, type: 'file' });
     }
   }
 
-  return files;
+  nodes.sort((a, b) => (a.type === b.type ? a.name.localeCompare(b.name) : a.type === 'directory' ? -1 : 1));
+  return nodes;
 }
 
 export async function readProjectFile(projectName: string, filePath: string): Promise<string> {

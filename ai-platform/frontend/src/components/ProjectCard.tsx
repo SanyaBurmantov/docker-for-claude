@@ -3,11 +3,12 @@ import { Project } from '../services/api'
 interface ProjectCardProps {
   project: Project
   sessionRunning: boolean
+  attention?: 'waiting' | 'done'
   onOpen: () => void
   onDelete: () => void
 }
 
-export default function ProjectCard({ project, sessionRunning, onOpen, onDelete }: ProjectCardProps) {
+export default function ProjectCard({ project, sessionRunning, attention, onOpen, onDelete }: ProjectCardProps) {
   return (
     <div className="project-card">
       <h3>{project.name}</h3>
@@ -21,8 +22,11 @@ export default function ProjectCard({ project, sessionRunning, onOpen, onDelete 
           <span className={`status-indicator ${sessionRunning ? 'running' : 'offline'}`} />
           {sessionRunning ? 'Running' : 'Offline'}
         </span>
+        {sessionRunning && attention === 'waiting' && (
+          <span className="badge badge-waiting">⏳ Claude ждёт</span>
+        )}
         {project.lastActivity && (
-          <span style={{ color: '#666' }}>Last: {new Date(project.lastActivity).toLocaleString()}</span>
+          <span className="muted">Last: {new Date(project.lastActivity).toLocaleString()}</span>
         )}
       </div>
       <div className="project-actions">
