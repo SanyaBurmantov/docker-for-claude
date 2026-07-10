@@ -1,6 +1,7 @@
 import { Router, type Request, type Response } from 'express';
 import { execInContainer } from '../services/dockerService';
 import { isValidProjectName } from '../services/projectService';
+import { workingDiff } from '../services/gitService';
 
 const router = Router({ mergeParams: true });
 const CONTAINER_NAME = process.env.CLAUDE_CONTAINER || 'ai-claude';
@@ -36,12 +37,7 @@ router.get('/status', async (req: Request<{ id: string }>, res: Response) => {
 
 router.get('/diff', async (req: Request<{ id: string }>, res: Response) => {
   try {
-    // git diff ignores untracked files, so files Claude created from scratch
-    // are diffed against /dev/null separately
-    const cmd =
-      'git diff; git ls-files --others --exclude-standard | ' +
-      'while IFS= read -r f; do git diff --no-index -- /dev/null "$f"; done; true';
-    const output = await gitCmd(req.params.id, cmd);
+    const output = await workingDiff(req.params.id);
     const lines = output ? output.split('\n') : [];
     res.json({ diff: lines });
   } catch (err) {

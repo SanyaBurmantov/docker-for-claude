@@ -1,0 +1,38 @@
+# Hot reload for the web stack.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build backend frontend
+#
+# Opt-in on purpose, not docker-compose.override.yml: this profile serves the UI
+# from vite instead of nginx, which drops the UI_PASSWORD basic auth and the
+# proxy_buffering tweak the Gemini SSE stream relies on. Verify anything touching
+# either against a plain `docker compose up -d --build` before shipping.
+#
+# Never name claude-container here. Recreating it kills the tmux session that the
+# web terminal — and any Claude conversation running in it — lives in.
+#
+# Both services stop at the `builder` stage, which has the dev dependencies and a
+# node_modules compiled for alpine's musl. Only src/ is bind-mounted, so the
+# host's glibc-linked node-pty and esbuild binaries never shadow them.
+
+services:
+  backend:
+    build:
+      context: ./backend
+      target: builder
+    command: npm run dev
+    volumes:
+      - ./backend/src:/app/src
+
+  frontend:
+    build:
+      context: ./frontend
+      target: builder
+    command: npm run dev
+    environment:
+      - API_TARGET=http://backend:3000
+      - VITE_PORT=80
+      - VITE_HMR_CLIENT_PORT=9900
+    volumes:
+      - ./frontend/src:/app/src
+      - ./frontend/index.html:/app/index.html
+      - ./frontend/vite.config.ts:/app/vite.config.ts

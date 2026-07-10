@@ -102,6 +102,38 @@ export function saveFileContent(id: string, path: string, content: string): Prom
   })
 }
 
+/** Checklists live in the project root so Claude can read and edit them too. */
+export const TASKS_FILE = 'TASKS.md'
+export const FIXES_FILE = 'FIXES.md'
+
+/** Returns null when the project has no such file yet, as opposed to failing. */
+export async function fetchChecklistFile(id: string, file: string): Promise<string | null> {
+  const res = await fetch(`/api/projects/${id}/files/${encodeURIComponent(file)}`)
+  if (res.status === 404) return null
+  if (!res.ok) {
+    const text = await res.text().catch(() => res.statusText)
+    throw new Error(`HTTP ${res.status}: ${text}`)
+  }
+  return res.text()
+}
+
+export function saveChecklistFile(id: string, file: string, content: string): Promise<void> {
+  return saveFileContent(id, file, content)
+}
+
+export interface UsageReport {
+  /** null when the project has no Claude session on disk yet. */
+  contextTokens: number | null
+  windowTokens: number
+  outputTokens: number
+  model: string
+  updatedAt: string | null
+}
+
+export function getUsage(id: string): Promise<UsageReport> {
+  return request<UsageReport>(`/api/projects/${id}/usage`)
+}
+
 export function startSession(id: string, opts: StartSessionOptions = {}): Promise<{ sessionId: string }> {
   return request<{ sessionId: string }>(`/api/projects/${id}/session/start`, {
     method: 'POST',
@@ -207,6 +239,115 @@ export function fsAction(id: string, action: FsAction, relPath: string, newPath?
 
 export function archiveUrl(id: string): string {
   return `/api/projects/${id}/archive`
+}
+
+export interface GeminiStatus {
+  configured: boolean
+  model: string
+  models: string[]
+  viaProxy: boolean
+}
+
+export interface GeminiMessage {
+  role: 'user' | 'model'
+  text: string
+}
+
+export function fetchGeminiStatus(): Promise<GeminiStatus> {
+  return request<GeminiStatus>('/api/gemini/status')
+}
+
+/** Reads an SSE response of {text|error|done} frames, invoking onText per chunk. */
+async function consumeTextStream(res: Response, onText: (chunk: string) => void): Promise<void> {
+  if (!res.ok || !res.body) {
+    const raw = await res.text().catch(() => res.statusText)
+    let message = raw
+    try {
+      message = JSON.parse(raw).error ?? raw
+    } catch {
+      // non-JSON error body — show it as-is
+    }
+    throw new Error(message || `HTTP ${res.status}`)
+  }
+
+  const reader = res.body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+
+  for (;;) {
+    const { done, value } = await reader.read()
+    if (done) break
+
+    buffer += decoder.decode(value, { stream: true })
+    const lines = buffer.split('\n')
+    buffer = lines.pop() ?? ''
+
+    for (const line of lines) {
+      if (!line.startsWith('data:')) continue
+      const payload = line.slice(5).trim()
+      if (!payload) continue
+
+      const event = JSON.parse(payload) as { text?: string; error?: string; done?: boolean }
+      if (event.error) throw new Error(event.error)
+      if (event.text) onText(event.text)
+    }
+  }
+}
+
+/** Streams the reply, invoking onText for each chunk. Resolves when complete. */
+export async function streamGeminiChat(
+  messages: GeminiMessage[],
+  model: string,
+  onText: (chunk: string) => void,
+  signal?: AbortSignal
+): Promise<void> {
+  const res = await fetch('/api/gemini/chat', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ messages, model }),
+    signal,
+  })
+  await consumeTextStream(res, onText)
+}
+
+/** "what" describes the selection alone; "how" lets Claude read the project. */
+export type ExplainMode = 'what' | 'how'
+
+export interface ExplainRequest {
+  mode: ExplainMode
+  code: string
+  file?: string
+  hunk?: string
+}
+
+/** Asks Claude, running inside the project directory, about a diff selection. */
+export async function streamExplain(
+  projectId: string,
+  body: ExplainRequest,
+  onText: (chunk: string) => void,
+  signal?: AbortSignal
+): Promise<void> {
+  const res = await fetch(`/api/projects/${projectId}/explain`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+    signal,
+  })
+  await consumeTextStream(res, onText)
+}
+
+/** Streams Claude's review of the uncommitted diff. The backend reads the diff itself. */
+export async function streamReview(
+  projectId: string,
+  onText: (chunk: string) => void,
+  signal?: AbortSignal
+): Promise<void> {
+  const res = await fetch(`/api/projects/${projectId}/review`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    signal,
+  })
+  await consumeTextStream(res, onText)
 }
 
 export async function uploadFiles(id: string, dir: string, files: File[]): Promise<void> {

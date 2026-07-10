@@ -1,6 +1,7 @@
 import { Routes, Route, Link } from 'react-router-dom'
 import Dashboard from './pages/Dashboard'
 import ProjectPage from './pages/ProjectPage'
+import GeminiPanel from './components/GeminiPanel'
 import { novncUrl } from './services/api'
 
 function App() {
@@ -19,6 +20,7 @@ function App() {
           <Route path="/project/:id" element={<ProjectPage />} />
         </Routes>
       </main>
+      <GeminiPanel />
     </div>
   )
 }

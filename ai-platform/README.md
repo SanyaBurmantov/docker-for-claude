@@ -149,11 +149,13 @@ docker exec ai-claude nslookup google.com
 | Volume | Назначение |
 |--------|-----------|
 | `projects` | Рабочие проекты |
-| `claude-auth` | Токены авторизации Claude |
+| `claude-auth` | Токены авторизации Claude, `.claude.json`, настройки и история сессий |
 | `browser-profile` | Профиль Firefox (cookies, сессии) |
 | `browser-config` | Конфигурация |
 
-Токены сохраняются между перезапусками — повторная авторизация не требуется.
+Токены сохраняются между перезапусками и пересборками — повторная авторизация не требуется.
+
+Claude Code хранит состояние в двух местах: конфиг-каталог (`.credentials.json`, `settings.json`, сессии) и `$HOME/.claude.json` (флаг пройденного онбординга, аккаунт). Второй файл лежит рядом с каталогом, а не внутри него, поэтому при монтировании только `~/.claude` он терялся при каждой пересборке и CLI показывал мастер первого запуска, хотя токен был на месте. Контейнер задаёт `CLAUDE_CONFIG_DIR=/home/claude/.claude`, так что оба файла попадают в volume `claude-auth`. Побочный бонус: история сессий переживает пересборку, и `claude --continue` работает после неё.
 
 ## Команды
 
@@ -173,12 +175,29 @@ docker compose down
 # Остановка с очисткой volumes (удалит авторизацию!)
 docker compose down -v
 
+# Горячая перезагрузка backend + frontend (правки видны без пересборки)
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build backend frontend
+
 # Войти в Claude контейнер
 docker exec -it ai-claude bash
 
 # Войти в браузерный контейнер
 docker exec -it ai-browser bash
 ```
+
+## Разработка самой платформы
+
+`docker-compose.dev.yml` поднимает backend через `tsx watch`, а frontend — через `vite` вместо nginx, с bind-маунтом `src/`. Правки в коде подхватываются сразу:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build backend frontend
+```
+
+Профиль включается явно, а не через `docker-compose.override.yml`, потому что в нём UI отдаёт vite, а не nginx — значит не работают ни basic auth по `UI_PASSWORD`, ни `proxy_buffering off` для SSE-стрима Gemini. Всё, что затрагивает эти две вещи, проверяйте на обычной сборке.
+
+Монтируется только `src/`: `node_modules` внутри образов собраны под musl (alpine), а установленные на хосте — под glibc, и подмена каталога целиком сломала бы нативные `node-pty` и `esbuild`. Новая зависимость в `package.json` по-прежнему требует пересборки образа.
+
+**Не добавляйте в эту команду `claude-container`.** Веб-терминал и работающий в нём Claude живут в tmux внутри `ai-claude`, и пересоздание контейнера обрывает сессию. По той же причине `docker compose build && docker compose up -d` без имён сервисов убьёт активный диалог.
 
 ## Диагностика
 

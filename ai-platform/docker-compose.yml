@@ -73,6 +73,18 @@ services:
       - PORT=3000
       - CLAUDE_CONTAINER=ai-claude
       - BROWSER_CONTAINER=ai-browser
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - GEMINI_MODEL=${GEMINI_MODEL:-gemini-3.1-flash-lite}
+      - EXPLAIN_MODEL=${EXPLAIN_MODEL:-sonnet}
+      - EXPLAIN_TIMEOUT_MS=${EXPLAIN_TIMEOUT_MS:-120000}
+      - REVIEW_MODEL=${REVIEW_MODEL:-sonnet}
+      - REVIEW_TIMEOUT_MS=${REVIEW_TIMEOUT_MS:-240000}
+      # backend sits on app-net with direct egress, so unlike the claude/browser
+      # containers it is not transparently proxied — it dials the proxy itself
+      - PROXY_HOST=${PROXY_HOST}
+      - PROXY_PORT=${PROXY_PORT}
+      - PROXY_USER=${PROXY_USER}
+      - PROXY_PASS=${PROXY_PASS}
     depends_on:
       claude-container:
         condition: service_started

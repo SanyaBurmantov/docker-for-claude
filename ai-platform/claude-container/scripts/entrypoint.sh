@@ -1,5 +1,22 @@
 #!/bin/bash
 
+CONFIG_DIR="${CLAUDE_CONFIG_DIR:-/home/claude/.claude}"
+mkdir -p "$CONFIG_DIR"
+
+# Rescue a config written by a container from before CLAUDE_CONFIG_DIR was set,
+# so an existing login is not thrown away on the upgrade rebuild.
+if [ -f "$HOME/.claude.json" ] && [ ! -e "$CONFIG_DIR/.claude.json" ]; then
+  mv "$HOME/.claude.json" "$CONFIG_DIR/.claude.json"
+fi
+
+# The token already survives in the volume, but without .claude.json the CLI has
+# no hasCompletedOnboarding flag and greets an authorised user with the login
+# wizard anyway. Seeding the flag skips it; Claude fills in the rest of the file.
+if [ -s "$CONFIG_DIR/.credentials.json" ] && [ ! -e "$CONFIG_DIR/.claude.json" ]; then
+  echo '{"hasCompletedOnboarding": true}' > "$CONFIG_DIR/.claude.json"
+  chmod 600 "$CONFIG_DIR/.claude.json"
+fi
+
 # Projects in /workspace are owned by the host user while git runs as root here;
 # without this every git command fails with "detected dubious ownership"
 git config --global --add safe.directory '*'
@@ -17,7 +34,7 @@ git config --global credential.helper 'store --file /home/claude/.claude/.git-cr
 # Claude Code hooks: report "waiting for input" / "finished" events so the web UI
 # can notify the user. Created only once — the settings file lives in the volume,
 # so manual edits are preserved.
-SETTINGS=/home/claude/.claude/settings.json
+SETTINGS="$CONFIG_DIR/settings.json"
 if [ ! -f "$SETTINGS" ]; then
 cat > "$SETTINGS" << 'EOF'
 {

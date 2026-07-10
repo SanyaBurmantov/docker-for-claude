@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { spawn } from 'child_process';
 import { docker, execInContainer } from '../services/dockerService';
+import { claudeEvents } from '../services/claudeEvents';
 
 const router = Router();
 const CONTAINER_NAME = process.env.CLAUDE_CONTAINER || 'ai-claude';
@@ -134,25 +135,11 @@ router.post('/restart/:name', async (req, res) => {
   }
 });
 
-// Claude Code hook events (written by hooks configured in the claude container)
-router.get('/events', async (_req, res) => {
-  try {
-    const out = await execInContainer(
-      CONTAINER_NAME,
-      'tail -n 100 /tmp/claude-events.log 2>/dev/null || true'
-    );
-    const events = out
-      .split('\n')
-      .filter(Boolean)
-      .map((line) => {
-        const [ts, type, project] = line.split('|');
-        return { ts: Number(ts) * 1000, type, project };
-      })
-      .filter((e) => Number.isFinite(e.ts) && e.ts > 0 && !!e.type && !!e.project);
-    res.json({ events });
-  } catch {
-    res.json({ events: [] });
-  }
+// Claude Code hook events (written by hooks configured in the claude container).
+// Live updates arrive over /ws/events; this serves the same buffer to clients
+// that cannot hold a socket open.
+router.get('/events', (_req, res) => {
+  res.json({ events: claudeEvents.recent() });
 });
 
 export default router;

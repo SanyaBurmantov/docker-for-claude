@@ -134,6 +134,12 @@ router.get('/:id/files/*', async (req: Request, res: Response) => {
     // leaves the charset up to the browser
     res.type('text/plain; charset=utf-8').send(content);
   } catch (err) {
+    // A missing file is an answer, not a failure: callers such as the Tasks tab
+    // need to tell "not created yet" apart from a real read error.
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
+      res.status(404).json({ error: 'File not found' });
+      return;
+    }
     const status = (err as Error).message === 'Path traversal detected' ? 403 : 500;
     res.status(status).json({ error: String(err) });
   }

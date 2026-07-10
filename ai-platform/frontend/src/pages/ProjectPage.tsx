@@ -4,18 +4,52 @@ import {
   getProject, getSessionStatus, startSession, stopSession,
   getGitStatus, getGitDiff, getGitLog, getGitShow, getGitBranches,
   gitCommit, gitBranch, gitCheckout, gitPull, gitPush, gitRollback,
-  saveGitCredentials, archiveUrl,
+  saveGitCredentials, archiveUrl, streamReview,
+  fetchChecklistFile, saveChecklistFile, TASKS_FILE, FIXES_FILE,
+  getUsage, UsageReport,
   Project, novncUrl, StartSessionOptions,
 } from '../services/api'
+import { parseTasks, serialize, withTasksAdded } from '../services/checklist'
 import TerminalComponent from '../components/Terminal'
 import DiffViewer from '../components/DiffViewer'
 import FileExplorer from '../components/FileExplorer'
+import ChecklistPanel, { TASKS_COPY, FIXES_COPY } from '../components/ChecklistPanel'
 import Modal, { ConfirmDialog } from '../components/Modal'
 import { useToast } from '../components/Toast'
 
-type Tab = 'terminal' | 'shell' | 'diff' | 'files' | 'git'
+type Tab = 'terminal' | 'shell' | 'tasks' | 'fixes' | 'diff' | 'files' | 'git'
 
-const TABS: Tab[] = ['terminal', 'shell', 'diff', 'files', 'git']
+const TABS: Tab[] = ['terminal', 'shell', 'tasks', 'fixes', 'diff', 'files', 'git']
+
+/**
+ * Findings come back as "- [BUG] file:line — ...", but the model sometimes drops
+ * the brackets and writes "- BUG: ...", so both spellings match.
+ */
+const FINDING_RE = /^\s*[-*]?\s*(?:\[(BUG|RISK|NIT)\]|(BUG|RISK|NIT)\s*[:—-])/i
+
+function findingSeverity(line: string): string | undefined {
+  const match = line.match(FINDING_RE)
+  return (match?.[1] ?? match?.[2])?.toUpperCase()
+}
+
+function reviewLineClass(line: string): string {
+  const severity = findingSeverity(line)
+  return severity ? `review-line review-${severity.toLowerCase()}` : 'review-line'
+}
+
+/** A finding becomes a task verbatim, minus the markdown bullet. */
+function parseFindings(review: string): string[] {
+  return review
+    .split('\n')
+    .filter((line) => findingSeverity(line))
+    .map((line) => line.trim().replace(/^[-*]\s*/, ''))
+}
+
+const USAGE_POLL_MS = 15_000
+
+function formatTokens(n: number): string {
+  return n.toLocaleString('ru-RU')
+}
 
 export default function ProjectPage() {
   const { id } = useParams<{ id: string }>()
@@ -29,6 +63,7 @@ export default function ProjectPage() {
   })
   const [sessionId, setSessionId] = useState<string | null>(null)
   const [sessionRunning, setSessionRunning] = useState(false)
+  const [usage, setUsage] = useState<UsageReport | null>(null)
   const [gitStatus, setGitStatus] = useState('')
   const [currentBranch, setCurrentBranch] = useState('')
   const [gitDiff, setGitDiff] = useState('')
@@ -46,6 +81,12 @@ export default function ProjectPage() {
   const [starting, setStarting] = useState(false)
   const [commitView, setCommitView] = useState<{ hash: string; diff: string } | null>(null)
   const [showCredsModal, setShowCredsModal] = useState(false)
+  const [pendingRestart, setPendingRestart] = useState<{ prompt?: string } | null>(null)
+  const [review, setReview] = useState('')
+  const [reviewError, setReviewError] = useState('')
+  const [reviewing, setReviewing] = useState(false)
+  const [savingFindings, setSavingFindings] = useState(false)
+  const reviewAbortRef = useRef<AbortController | null>(null)
   const [credHost, setCredHost] = useState('github.com')
   const [credUser, setCredUser] = useState('')
   const [credToken, setCredToken] = useState('')
@@ -150,6 +191,34 @@ export default function ProjectPage() {
     setTaskPrompt('')
   }
 
+  /**
+   * Context lives in the tmux session, so a clean slate means killing it and
+   * launching `claude` again without --continue.
+   */
+  async function restartSession(prompt?: string) {
+    if (!id) return
+    setStarting(true)
+    try {
+      if (sessionRunning) await stopSession(id).catch(() => {})
+      // Drop the socket before the old pty dies, so the terminal reattaches to
+      // the new session instead of the corpse of the previous one.
+      setSessionId(null)
+      const result = await startSession(id, prompt ? { prompt } : {})
+      setSessionId(result.sessionId)
+      setSessionRunning(true)
+      setActiveTab('terminal')
+    } catch (e) {
+      toast('error', `Не удалось перезапустить Claude: ${e instanceof Error ? e.message : 'Unknown error'}`)
+    } finally {
+      setStarting(false)
+    }
+  }
+
+  function requestRestart(prompt?: string) {
+    if (sessionRunning) setPendingRestart({ prompt })
+    else restartSession(prompt)
+  }
+
   async function handleStopSession() {
     if (!id) return
     try {
@@ -238,6 +307,98 @@ export default function ProjectPage() {
     }
   }
 
+  async function handleReview() {
+    if (!id || reviewing) return
+
+    setReview('')
+    setReviewError('')
+    setReviewing(true)
+
+    const controller = new AbortController()
+    reviewAbortRef.current = controller
+
+    try {
+      await streamReview(id, (chunk) => setReview((prev) => prev + chunk), controller.signal)
+    } catch (e) {
+      if (controller.signal.aborted) return
+      setReviewError(e instanceof Error ? e.message : 'Unknown error')
+    } finally {
+      if (!controller.signal.aborted) {
+        setReviewing(false)
+        reviewAbortRef.current = null
+      }
+    }
+  }
+
+  function stopReview() {
+    reviewAbortRef.current?.abort()
+    reviewAbortRef.current = null
+    setReviewing(false)
+  }
+
+  /**
+   * Re-reviewing the same diff yields the same findings, so anything already in
+   * FIXES.md — done or not — is skipped instead of piling up duplicates.
+   */
+  async function handleFindingsToFixes() {
+    if (!id || savingFindings) return
+
+    const findings = parseFindings(review)
+    if (findings.length === 0) return
+
+    setSavingFindings(true)
+    try {
+      const content = await fetchChecklistFile(id, FIXES_FILE)
+      const lines = content === null ? [] : content.split('\n')
+
+      const existing = new Set(parseTasks(lines).map((t) => t.text.toLowerCase()))
+      const fresh = findings.filter((text) => !existing.has(text.toLowerCase()))
+
+      if (fresh.length === 0) {
+        toast('info', 'Все замечания уже в доработках')
+        return
+      }
+
+      await saveChecklistFile(id, FIXES_FILE, serialize(withTasksAdded(lines, fresh, FIXES_COPY.heading)))
+      const skipped = findings.length - fresh.length
+      toast('success', `В доработки: ${fresh.length}${skipped > 0 ? ` (${skipped} уже были)` : ''}`)
+    } catch (e) {
+      toast('error', `Не сохранилось: ${e instanceof Error ? e.message : 'Unknown error'}`)
+    } finally {
+      setSavingFindings(false)
+    }
+  }
+
+  useEffect(() => () => reviewAbortRef.current?.abort(), [])
+
+  /**
+   * The transcript only grows while Claude answers, so polling is the whole
+   * mechanism. A failed poll keeps the last known figure rather than blanking
+   * the badge — a restarting container should not look like an empty session.
+   */
+  useEffect(() => {
+    if (!id) return
+
+    let cancelled = false
+
+    const poll = async () => {
+      try {
+        const next = await getUsage(id)
+        if (!cancelled) setUsage(next)
+      } catch {
+        /* keep the previous reading */
+      }
+    }
+
+    poll()
+    const timer = setInterval(poll, USAGE_POLL_MS)
+
+    return () => {
+      cancelled = true
+      clearInterval(timer)
+    }
+  }, [id])
+
   async function handleShowCommit(line: string) {
     if (!id) return
     const hash = line.split(' ')[0]
@@ -280,12 +441,21 @@ export default function ProjectPage() {
     )
   }
 
+  const findings = parseFindings(review)
+
+  const usedPercent =
+    usage?.contextTokens != null
+      ? Math.min(100, Math.round((usage.contextTokens / usage.windowTokens) * 100))
+      : null
+
   const tabs: { key: Tab; label: string }[] = [
     { key: 'terminal', label: 'Claude' },
     { key: 'shell', label: 'Shell' },
     { key: 'diff', label: 'Diff' },
     { key: 'files', label: 'Files' },
     { key: 'git', label: 'Git' },
+    { key: 'tasks', label: 'Tasks' },
+    { key: 'fixes', label: 'Fixes' },
   ]
 
   return (
@@ -295,6 +465,21 @@ export default function ProjectPage() {
           <Link to="/" className="btn btn-secondary btn-sm">← Back</Link>
           <h2>{project.name}</h2>
           {currentBranch && <span className="badge badge-git" title="Current branch">⎇ {currentBranch}</span>}
+          {usedPercent !== null && usage?.contextTokens != null && (
+            <span
+              className={`badge badge-usage ${usedPercent >= 90 ? 'usage-critical' : usedPercent >= 70 ? 'usage-warn' : ''}`}
+              title={
+                `Контекст: ${formatTokens(usage.contextTokens)} из ${formatTokens(usage.windowTokens)} токенов\n` +
+                `Осталось: ${formatTokens(usage.windowTokens - usage.contextTokens)} (${100 - usedPercent}%)` +
+                (usage.model ? `\nМодель: ${usage.model}` : '')
+              }
+            >
+              <span className="usage-bar">
+                <span className="usage-bar-fill" style={{ width: `${usedPercent}%` }} />
+              </span>
+              {100 - usedPercent}% ctx
+            </span>
+          )}
           <span className={sessionRunning ? 'badge badge-running' : 'badge badge-offline'}>
             <span className={`status-indicator ${sessionRunning ? 'running' : 'offline'}`} />
             {sessionRunning ? 'Running' : 'Offline'}
@@ -359,8 +544,41 @@ export default function ProjectPage() {
       <div className="tab-content">
         {activeTab === 'terminal' && (
           <div>
+            <div className="diff-controls">
+              <button
+                className="btn btn-secondary btn-sm"
+                onClick={() => requestRestart()}
+                disabled={starting}
+                title="Перезапустить Claude с чистым контекстом"
+              >
+                ✦ Новая задача
+              </button>
+              <span className="tasks-hint">Закрывает диалог и открывает Claude заново</span>
+            </div>
             <TerminalComponent sessionId={sessionId} />
           </div>
+        )}
+
+        {activeTab === 'tasks' && id && (
+          <ChecklistPanel
+            projectId={id}
+            file={TASKS_FILE}
+            copy={TASKS_COPY}
+            onDiscuss={(text) =>
+              requestRestart(`Давай обсудим задачу, пока ничего не меняя в коде: ${text}`)
+            }
+          />
+        )}
+
+        {activeTab === 'fixes' && id && (
+          <ChecklistPanel
+            projectId={id}
+            file={FIXES_FILE}
+            copy={FIXES_COPY}
+            onDiscuss={(text) =>
+              requestRestart(`Давай обсудим замечание код-ревью, пока ничего не меняя в коде: ${text}`)
+            }
+          />
         )}
 
         {activeTab === 'shell' && id && (
@@ -376,7 +594,7 @@ export default function ProjectPage() {
                 Refresh Diff
               </button>
             </div>
-            <DiffViewer diff={gitDiff} />
+            <DiffViewer diff={gitDiff} projectId={id} />
           </div>
         )}
 
@@ -422,14 +640,58 @@ export default function ProjectPage() {
             </div>
 
             <div>
-              <h3 className="section-title">Status</h3>
-              <div className="git-output">{gitStatus || 'No changes'}</div>
+              <div className="review-header">
+                <h3 className="section-title">Review</h3>
+                {!reviewing && findings.length > 0 && (
+                  <button
+                    className="btn btn-primary btn-sm"
+                    onClick={handleFindingsToFixes}
+                    disabled={savingFindings}
+                    title={`Записать в ${FIXES_FILE}`}
+                  >
+                    ➜ В доработки ({findings.length})
+                  </button>
+                )}
+                {reviewing ? (
+                  <button className="btn btn-danger btn-sm" onClick={stopReview}>
+                    Stop
+                  </button>
+                ) : (
+                  <button
+                    className="btn btn-secondary btn-sm"
+                    onClick={handleReview}
+                    disabled={!gitDiff}
+                    title={gitDiff ? 'Claude проверит дифф' : 'Нет изменений'}
+                  >
+                    🔍 Проверить дифф
+                  </button>
+                )}
+              </div>
+
+              {reviewError ? (
+                <div className="git-output review-error">{reviewError}</div>
+              ) : review ? (
+                <div className="review-output">
+                  {review.split('\n').map((line, i) => (
+                    <div key={i} className={reviewLineClass(line)}>
+                      {line || ' '}
+                    </div>
+                  ))}
+                  {reviewing && <span className="gemini-caret" />}
+                </div>
+              ) : reviewing ? (
+                <div className="git-output review-waiting">Claude читает дифф и файлы проекта…</div>
+              ) : (
+                <div className="no-changes">
+                  Claude просмотрит незакоммиченные изменения и назовёт проблемы
+                </div>
+              )}
             </div>
 
             <div>
               <h3 className="section-title">Diff</h3>
               {gitDiff ? (
-                <DiffViewer diff={gitDiff} />
+                <DiffViewer diff={gitDiff} projectId={id} />
               ) : (
                 <div className="no-changes">No changes to show</div>
               )}
@@ -481,9 +743,32 @@ export default function ProjectPage() {
                 </div>
               )}
             </div>
+
+            <div>
+              <h3 className="section-title">Status</h3>
+              <div className="git-output">{gitStatus || 'No changes'}</div>
+            </div>
           </div>
         )}
       </div>
+
+      {pendingRestart && (
+        <ConfirmDialog
+          title="Сбросить контекст?"
+          message={
+            pendingRestart.prompt
+              ? 'Текущая сессия Claude будет закрыта, и он начнёт заново с этой задачей.'
+              : 'Текущая сессия Claude будет закрыта, и он откроется с чистым контекстом.'
+          }
+          confirmLabel="Перезапустить"
+          onConfirm={() => {
+            const { prompt } = pendingRestart
+            setPendingRestart(null)
+            restartSession(prompt)
+          }}
+          onCancel={() => setPendingRestart(null)}
+        />
+      )}
 
       {showRollbackConfirm && (
         <ConfirmDialog
@@ -526,7 +811,7 @@ export default function ProjectPage() {
       {commitView && (
         <Modal title={`Commit ${commitView.hash}`} onClose={() => setCommitView(null)} wide>
           <div className="modal-wide-body">
-            <DiffViewer diff={commitView.diff} />
+            <DiffViewer diff={commitView.diff} projectId={id} />
           </div>
         </Modal>
       )}

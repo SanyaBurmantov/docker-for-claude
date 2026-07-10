@@ -33,4 +33,12 @@ RUN chmod +x /entrypoint.sh
 
 ENV HOME=/home/claude
 
+# Claude Code splits its state in two: the config dir (.credentials.json,
+# settings.json, sessions) and $HOME/.claude.json (onboarding flag, account).
+# Only the first sat on the claude-auth volume, so a rebuild wiped .claude.json
+# and the CLI re-ran its first-run login wizard. Pointing the config dir at the
+# volume puts both files inside it. docker exec inherits this from the image
+# config, so the tmux server started by the backend picks it up too.
+ENV CLAUDE_CONFIG_DIR=/home/claude/.claude
+
 ENTRYPOINT ["/entrypoint.sh"]

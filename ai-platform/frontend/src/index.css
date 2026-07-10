@@ -427,6 +427,36 @@ button {
   border-color: rgba(74, 88, 117, 0.5);
 }
 
+/* Context left in the Claude session; turns brass, then red, as it fills up. */
+.badge-usage {
+  background: rgba(125, 143, 171, 0.08);
+  color: var(--text-dim);
+  border-color: rgba(125, 143, 171, 0.4);
+}
+
+.badge-usage.usage-warn {
+  color: var(--brass);
+  border-color: rgba(232, 176, 75, 0.55);
+}
+
+.badge-usage.usage-critical {
+  color: var(--red);
+  border-color: rgba(255, 59, 92, 0.55);
+}
+
+.usage-bar {
+  width: 46px;
+  height: 5px;
+  background: rgba(125, 143, 171, 0.22);
+  overflow: hidden;
+}
+
+.usage-bar-fill {
+  height: 100%;
+  background: currentColor;
+  transition: width 0.4s ease;
+}
+
 .badge-waiting {
   background: rgba(232, 176, 75, 0.1);
   color: var(--brass);
@@ -674,6 +704,222 @@ button {
   display: flex;
   gap: 8px;
   margin-bottom: 12px;
+}
+
+/* Anchored to the selection and portalled to <body>, so it clears the
+   commit modal's stacking context (z-index 900). */
+.diff-pop {
+  position: fixed;
+  z-index: 950;
+  background: linear-gradient(165deg, var(--bg-3), var(--bg-2) 70%);
+  border: 1px solid var(--line-strong);
+  clip-path: var(--cut-sm);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6), var(--glow-cyan);
+  animation: diff-pop-in 0.14s cubic-bezier(0.2, 0.9, 0.3, 1.15);
+}
+
+@keyframes diff-pop-in {
+  from { opacity: 0; transform: translateY(-4px); }
+}
+
+.diff-pop-actions {
+  display: flex;
+  gap: 6px;
+  padding: 7px;
+}
+
+.diff-pop-btn {
+  flex: 1;
+  padding: 8px 10px;
+  font-family: var(--font-ui);
+  font-size: 0.76rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--cyan);
+  background: rgba(0, 240, 255, 0.06);
+  border: 1px solid var(--line);
+  cursor: pointer;
+  transition: background 0.14s, color 0.14s;
+}
+
+.diff-pop-btn:hover {
+  background: rgba(0, 240, 255, 0.16);
+  color: var(--text);
+}
+
+.diff-pop-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--line);
+}
+
+.diff-pop-title {
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--magenta);
+  white-space: nowrap;
+}
+
+.diff-pop-file {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  color: var(--text-faint);
+  text-align: right;
+  direction: rtl;         /* keep the filename visible, clip the leading path */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.diff-pop-close {
+  padding: 0 2px;
+  font-size: 1rem;
+  line-height: 1;
+  color: var(--text-dim);
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+.diff-pop-close:hover {
+  color: var(--red);
+}
+
+.diff-pop-body {
+  max-height: 320px;
+  overflow-y: auto;
+  padding: 10px;
+  font-size: 0.8rem;
+  line-height: 1.55;
+  color: var(--text);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.diff-pop-waiting {
+  color: var(--text-faint);
+  font-style: italic;
+}
+
+.diff-pop-error {
+  color: var(--red);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+}
+
+/* ============ TASKS ============ */
+
+.tasks-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.tasks-hint {
+  align-self: center;
+  font-size: 0.72rem;
+  color: var(--text-faint);
+}
+
+.tasks-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.task-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  background: var(--bg-2);
+  clip-path: var(--cut-sm);
+}
+
+.task-row.task-done .task-text {
+  color: var(--text-faint);
+  text-decoration: line-through;
+}
+
+.task-check {
+  flex-shrink: 0;
+  padding: 0;
+  font-size: 1.05rem;
+  line-height: 1;
+  color: var(--cyan);
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+.task-check:hover {
+  color: var(--green);
+}
+
+.task-text {
+  flex: 1;
+  min-width: 0;
+  font-size: 0.85rem;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+/* ============ REVIEW ============ */
+
+.review-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.review-output {
+  max-height: 340px;
+  overflow-y: auto;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  background: var(--bg-terminal);
+  font-family: var(--font-mono);
+  font-size: 0.76rem;
+  line-height: 1.6;
+}
+
+.review-line {
+  color: var(--text-dim);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  border-left: 2px solid transparent;
+  padding-left: 8px;
+}
+
+.review-line.review-bug {
+  color: #ff92a6;
+  border-left-color: var(--red);
+}
+
+.review-line.review-risk {
+  color: #f0cd8a;
+  border-left-color: var(--brass);
+}
+
+.review-line.review-nit {
+  color: var(--text-faint);
+  border-left-color: var(--line-strong);
+}
+
+.review-waiting {
+  color: var(--text-faint);
+  font-style: italic;
+}
+
+.review-error {
+  color: var(--red);
 }
 
 /* ============ FILES ============ */
@@ -1322,4 +1568,222 @@ button {
     animation: none !important;
     transition: none !important;
   }
+}
+
+/* ============ GEMINI PANEL (left drawer) ============ */
+
+.gemini-tab {
+  position: fixed;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 190;
+  padding: 18px 7px;
+  background: rgba(9, 12, 24, 0.9);
+  border: 1px solid var(--line-strong);
+  border-left: none;
+  color: var(--magenta);
+  cursor: pointer;
+  transition: left 0.25s cubic-bezier(0.2, 0.9, 0.3, 1), color 0.15s, box-shadow 0.15s;
+}
+
+.gemini-tab:hover {
+  box-shadow: var(--glow-magenta);
+}
+
+.gemini-tab-open {
+  left: 380px;
+}
+
+.gemini-tab-label {
+  display: block;
+  writing-mode: vertical-rl;
+  font-family: var(--font-display);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 3px;
+}
+
+.gemini-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 180;
+  background: rgba(2, 3, 8, 0.55);
+  backdrop-filter: blur(2px);
+}
+
+.gemini-panel {
+  position: fixed;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 380px;
+  z-index: 185;
+  display: flex;
+  flex-direction: column;
+  background: linear-gradient(180deg, var(--bg-2), var(--bg-1));
+  border-right: 1px solid var(--line-strong);
+  transform: translateX(-100%);
+  transition: transform 0.25s cubic-bezier(0.2, 0.9, 0.3, 1);
+}
+
+.gemini-panel-open {
+  transform: translateX(0);
+  box-shadow: 6px 0 40px rgba(0, 0, 0, 0.6), 0 0 24px rgba(255, 46, 196, 0.1);
+}
+
+.gemini-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--line);
+}
+
+.gemini-header h3 {
+  font-family: var(--font-display);
+  font-size: 0.85rem;
+  letter-spacing: 2px;
+  color: var(--magenta);
+}
+
+.gemini-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.gemini-model {
+  padding: 4px 6px;
+  max-width: 150px;
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  color: var(--text-dim);
+  background: var(--bg-3);
+  border: 1px solid var(--line);
+  cursor: pointer;
+}
+
+.gemini-icon-btn {
+  padding: 2px 7px;
+  font-size: 1rem;
+  line-height: 1;
+  color: var(--text-dim);
+  background: none;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.gemini-icon-btn:hover:not(:disabled) {
+  color: var(--cyan);
+  border-color: var(--line);
+}
+
+.gemini-icon-btn:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+.gemini-warning {
+  padding: 9px 16px;
+  font-size: 0.75rem;
+  color: var(--brass);
+  background: rgba(232, 176, 75, 0.08);
+  border-bottom: 1px solid rgba(232, 176, 75, 0.25);
+}
+
+.gemini-messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.gemini-empty {
+  margin: auto 0;
+  text-align: center;
+  font-size: 0.8rem;
+  color: var(--text-faint);
+}
+
+.gemini-msg {
+  padding: 9px 12px;
+  font-size: 0.82rem;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  clip-path: var(--cut-sm);
+}
+
+.gemini-msg-user {
+  align-self: flex-end;
+  max-width: 85%;
+  color: #06101f;
+  background: var(--cyan-dim);
+}
+
+.gemini-msg-model {
+  color: var(--text);
+  background: var(--bg-3);
+  border-left: 2px solid var(--magenta);
+}
+
+.gemini-msg-error {
+  color: var(--red);
+  background: rgba(255, 59, 92, 0.08);
+  border-left-color: var(--red);
+  font-family: var(--font-mono);
+  font-size: 0.74rem;
+}
+
+.gemini-caret {
+  display: inline-block;
+  width: 7px;
+  height: 1em;
+  margin-left: 2px;
+  vertical-align: text-bottom;
+  background: var(--magenta);
+  animation: gemini-blink 1s step-end infinite;
+}
+
+@keyframes gemini-blink {
+  50% { opacity: 0; }
+}
+
+.gemini-composer {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 16px 16px;
+  border-top: 1px solid var(--line);
+}
+
+.gemini-input {
+  width: 100%;
+  padding: 9px 11px;
+  font-family: var(--font-ui);
+  font-size: 0.82rem;
+  color: var(--text);
+  background: var(--bg-0);
+  border: 1px solid var(--line);
+  resize: vertical;
+}
+
+.gemini-input:focus {
+  outline: none;
+  border-color: var(--magenta);
+  box-shadow: var(--glow-magenta);
+}
+
+.gemini-composer .btn {
+  align-self: flex-end;
+}
+
+@media (max-width: 640px) {
+  .gemini-panel { width: 100%; }
+  .gemini-tab-open { left: auto; right: 0; border-right: none; border-left: 1px solid var(--line-strong); }
 }
