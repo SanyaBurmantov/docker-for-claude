@@ -54,11 +54,11 @@ iptables -A OUTPUT -p udp --dport 53 -j ACCEPT
 iptables -A OUTPUT -p udp -j DROP
 iptables -A OUTPUT -p icmp -j DROP
 
-# :3039 is port 12345 in hex — redsocks' local listener
+# :3039 is port 12345 in hex ??? redsocks' local listener
 if grep -q ':3039' /proc/net/tcp; then
     echo "redsocks is listening on 127.0.0.1:12345"
 else
-    echo "WARNING: redsocks is not listening — kill switch active, traffic is blocked"
+    echo "WARNING: redsocks is not listening ??? kill switch active, traffic is blocked"
 fi
 
 echo "Proxy gateway ready. All container traffic routed through proxy."

@@ -23,7 +23,8 @@ RUN apt-get update && apt-get install -y python3-pip && \
     rm -rf /var/lib/apt/lists/*
 
 RUN useradd -m -s /bin/bash claude && \
-    echo "claude:claude" | chpasswd
+    echo "claude:claude" | chpasswd && \
+    chown -R claude:claude /home/claude
 
 COPY scripts/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
