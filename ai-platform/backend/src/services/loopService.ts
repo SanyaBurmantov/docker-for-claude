@@ -1,6 +1,6 @@
 import { randomUUID, createHash } from 'crypto';
 import { READ_ONLY_TOOLS, WRITE_TOOLS, NO_TOOLS } from './claudeQuery';
-import { execInContainer } from './dockerService';
+import { execInContainer, tmuxSessionName } from './dockerService';
 import { workingDiff, currentCommit, resetHard } from './gitService';
 import { readProjectFile, writeProjectFile } from './projectService';
 import { runEngine } from './engines';
@@ -748,6 +748,22 @@ export class LoopConflictError extends Error {}
 
 const ACTIVE_OR_WAITING = new Set<Phase>(['analyzing', 'awaiting_approval', 'implementing', 'verifying', 'aggregating']);
 
+/** Used by `routes/sessions.ts` to refuse a manual tmux session while a loop owns the working tree. */
+export async function isLoopActive(project: string): Promise<boolean> {
+  const state = await loopStore.loadLoop(project);
+  return Boolean(state && ACTIVE_OR_WAITING.has(state.status));
+}
+
+/** The other half of the lock: a human already working in the terminal keeps the loop out. */
+async function manualSessionRunning(project: string): Promise<boolean> {
+  try {
+    await execInContainer(CONTAINER_NAME, `tmux has-session -t ${tmuxSessionName(project)}`);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export async function startLoop(
   project: string,
   goal: string,
@@ -759,6 +775,9 @@ export async function startLoop(
   const existing = await loopStore.loadLoop(project);
   if (existing && ACTIVE_OR_WAITING.has(existing.status)) {
     throw new LoopConflictError('Для этого проекта уже выполняется loop');
+  }
+  if (await manualSessionRunning(project)) {
+    throw new LoopConflictError('Для этого проекта открыта ручная сессия — останови её, чтобы запустить loop');
   }
 
   const now = new Date().toISOString();

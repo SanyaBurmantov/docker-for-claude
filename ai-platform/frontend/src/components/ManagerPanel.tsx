@@ -15,6 +15,9 @@ import {
 
 interface Props {
   projectId: string
+  /** Set to send a TASKS.md item straight to the loop-manager (see ProjectPage's tasks tab). */
+  startRequest?: { text: string; line: number } | null
+  onStartRequestHandled?: () => void
 }
 
 const PHASE_LABEL: Record<LoopState['status'], string> = {
@@ -50,7 +53,7 @@ function gateFromDecision(d: LoopDecision, planPath: string): LoopGatePayload {
   }
 }
 
-export default function ManagerPanel({ projectId }: Props) {
+export default function ManagerPanel({ projectId, startRequest, onStartRequestHandled }: Props) {
   const [open, setOpen] = useState(false)
   const [state, setState] = useState<LoopState | null>(null)
   const [gate, setGate] = useState<LoopGatePayload | null>(null)
@@ -124,13 +127,14 @@ export default function ManagerPanel({ projectId }: Props) {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight })
   }, [state?.iterations.length, liveText])
 
-  async function handleStart() {
-    const goal = goalInput.trim()
+  const canStart = !state || TERMINAL_STATUSES.includes(state.status)
+
+  async function beginLoop(goal: string, taskSourceLine?: number) {
     if (!goal || starting) return
     setStarting(true)
     setError('')
     try {
-      const s = await startLoop(projectId, goal)
+      const s = await startLoop(projectId, goal, taskSourceLine)
       setState(s)
       setGoalInput('')
       setOpen(true)
@@ -140,6 +144,22 @@ export default function ManagerPanel({ projectId }: Props) {
       setStarting(false)
     }
   }
+
+  async function handleStart() {
+    await beginLoop(goalInput.trim())
+  }
+
+  // A TASKS.md row was sent here from the tasks tab — start (or refuse) right away.
+  useEffect(() => {
+    if (!startRequest) return
+    if (canStart) {
+      beginLoop(startRequest.text, startRequest.line)
+    } else {
+      setError('Loop уже выполняется для этого проекта — сначала останови его')
+    }
+    onStartRequestHandled?.()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [startRequest])
 
   async function handleGateResolve(approve: boolean) {
     if (!gate || gateBusy) return
@@ -176,7 +196,6 @@ export default function ManagerPanel({ projectId }: Props) {
     }
   }
 
-  const canStart = !state || TERMINAL_STATUSES.includes(state.status)
   const isActive = Boolean(state) && !canStart
 
   return (
