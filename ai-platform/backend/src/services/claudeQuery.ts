@@ -6,6 +6,8 @@ const CONTAINER_NAME = process.env.CLAUDE_CONTAINER || 'ai-claude';
 /** Read-only tools: enough to follow imports and callers, unable to change anything. */
 export const READ_ONLY_TOOLS = 'Read Grep Glob';
 export const NO_TOOLS = 'Read Grep Glob Bash Edit Write WebFetch WebSearch Task';
+/** Loop executor/tester-authoring roles: read, edit and run commands, nothing beyond the project. */
+export const WRITE_TOOLS = 'Read Grep Glob Edit Write Bash';
 
 export interface ClaudeQuery {
   projectName: string;
@@ -16,6 +18,14 @@ export interface ClaudeQuery {
   /** Exactly one of these decides the tool policy. */
   allowedTools?: string;
   disallowedTools?: string;
+  /**
+   * Names the conversation so a later call can resume it (`--session-id` the
+   * first time, `--resume` after) — used by loop roles that keep one session
+   * across fix rounds so the prompt cache carries over. Omitted entirely for
+   * the stateless one-shot routes (explain/review/commit-message).
+   */
+  sessionId?: string;
+  resumeSession?: boolean;
 }
 
 export interface ClaudeHandlers {
@@ -39,6 +49,10 @@ interface StreamEvent {
 export function streamClaude(query: ClaudeQuery, handlers: ClaudeHandlers): () => void {
   const toolFlag = query.allowedTools ? '--allowedTools' : '--disallowedTools';
   const toolList = query.allowedTools ?? query.disallowedTools ?? NO_TOOLS;
+
+  const sessionArgs = query.sessionId
+    ? [query.resumeSession ? '--resume' : '--session-id', query.sessionId]
+    : [];
 
   // argv goes straight to docker, so the prompt never passes through a shell,
   // and -w puts Claude in the project so relative paths resolve there.
@@ -64,6 +78,7 @@ export function streamClaude(query: ClaudeQuery, handlers: ClaudeHandlers): () =
     query.systemPrompt,
     toolFlag,
     toolList,
+    ...sessionArgs,
   ]);
 
   child.stdin.end(query.prompt, 'utf-8');

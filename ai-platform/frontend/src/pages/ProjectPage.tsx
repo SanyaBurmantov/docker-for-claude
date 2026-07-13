@@ -14,6 +14,7 @@ import TerminalComponent from '../components/Terminal'
 import DiffViewer from '../components/DiffViewer'
 import FileExplorer from '../components/FileExplorer'
 import ChecklistPanel, { TASKS_COPY, FIXES_COPY } from '../components/ChecklistPanel'
+import ManagerPanel from '../components/ManagerPanel'
 import Modal, { ConfirmDialog } from '../components/Modal'
 import { useToast } from '../components/Toast'
 
@@ -783,6 +784,8 @@ export default function ProjectPage() {
           </div>
         )}
       </div>
+
+      {id && <ManagerPanel projectId={id} />}
 
       {pendingRestart && (
         <ConfirmDialog
