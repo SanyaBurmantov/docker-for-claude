@@ -9,6 +9,9 @@
 - [x] буквально обсудить разработка loop-менеджера для выполнения задач, придумать реализацию роли аналитик и менеджер — спроектировано, см. `ai-platform/docs/loop-manager-spec.md`
 - [ ] Реализовать loop-менеджер по спецификации `ai-platform/docs/loop-manager-spec.md` (промт: `ai-platform/docs/loop-manager-prompt.md`). Роли: менеджер, аналитик, исполнитель, тестировщик, код-ревьюер. Делегирование по сложности (haiku/sonnet/opus + opencode/deepseek + gemini-flash), гейт перед правками, escalation ladder, панель менеджера справа (клон Gemini). Срез 1: каркас на Claude-оси.
 - [ ] Разработать генератор промтов — спроектировано, см. `ai-platform/docs/promptgen-spec.md` (промт: `ai-platform/docs/promptgen-prompt.md`). Универсальный «улучшатель промтов»: one-shot `streamClaude`, tool-capable grounding по репозиторию, правая панель (клон GeminiPanel, Gemini переезжает влево), гибкие настройки генерации, кнопки «Скопировать» / «Передать менеджеру» (goal → loop).
+- [ ] В проектах кнопку открытия клауда заменить на открытие проекта
+- [ ] Добавить гибкий буфер обмена
+- [ ] Выбор модели убрать из чоисов, делать вкладками там где claude, shell, git. Кнопка START REUME WITH TASK оставить
 
 ## Примечания
 
