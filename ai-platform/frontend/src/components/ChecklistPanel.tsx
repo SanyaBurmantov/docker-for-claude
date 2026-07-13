@@ -35,7 +35,10 @@ export default function ChecklistPanel({ projectId, file, copy, onDiscuss }: Che
   const load = useCallback(async () => {
     try {
       const content = await fetchChecklistFile(projectId, file)
-      setLines(content === null ? [] : content.split('\n'))
+      // CRLF line endings (common on a Windows checkout) leave a trailing \r on
+      // every line after this split; TASK_RE's `$` can't match past it, so a
+      // CRLF task silently disappears from the list. Normalize once, here.
+      setLines(content === null ? [] : content.replace(/\r\n/g, '\n').split('\n'))
       setError('')
     } catch (e) {
       setError(e instanceof Error ? e.message : copy.loadError)
