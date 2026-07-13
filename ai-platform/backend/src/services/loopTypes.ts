@@ -95,6 +95,8 @@ export interface LoopState {
   /** One-line reason the last verify failed, fed to the next executor/manager turn. */
   lastFailureNote: string | null;
   budget: { maxIterations: number; maxFixRounds: number; deadlineMs: number };
+  /** Deadline clock base — reset every time a human gate resumes the loop, so wait time doesn't count. Absent in pre-existing stores. */
+  budgetResumedAt?: string;
   iterations: Iteration[];
   createdAt: string;
   updatedAt: string;
@@ -116,4 +118,6 @@ export interface LoopHandlers {
   onPhase(status: Phase): void;
   onDone(state: LoopState): void;
   onError(message: string): void;
+  /** A human-authored note just landed in `humanNotes` — otherwise it has no visible trace in the panel. */
+  onNote(note: string): void;
 }

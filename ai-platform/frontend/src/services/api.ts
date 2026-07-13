@@ -478,6 +478,7 @@ export interface LoopState {
   consecutiveFailsAtTier: number
   lastFailureNote: string | null
   budget: { maxIterations: number; maxFixRounds: number; deadlineMs: number }
+  budgetResumedAt?: string
   iterations: LoopIteration[]
   createdAt: string
   updatedAt: string
@@ -488,6 +489,7 @@ export type LoopStreamEvent =
   | { type: 'text'; text: string }
   | { type: 'gate'; gate: LoopGatePayload }
   | { type: 'phase'; status: LoopPhase }
+  | { type: 'note'; note: string }
   | { type: 'done' }
   | { type: 'error'; error: string }
 

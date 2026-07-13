@@ -59,6 +59,7 @@ router.get('/stream', (req: Request<{ id: string }>, res: Response) => {
     onText: (text) => sse.send({ type: 'text', text }),
     onGate: (gate) => sse.send({ type: 'gate', gate }),
     onPhase: (status) => sse.send({ type: 'phase', status }),
+    onNote: (note) => sse.send({ type: 'note', note }),
     onDone: () => sse.send({ type: 'done' }),
     onError: (error) => sse.send({ type: 'error', error }),
   });

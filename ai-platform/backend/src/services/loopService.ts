@@ -233,10 +233,15 @@ function tryDecision(text: string): Decision | null {
   if (!d || typeof d !== 'object') return null;
   if (!d.action || !DECISION_ACTIONS.has(d.action)) return null;
   if (!d.task?.trim() || !d.scope?.trim() || !d.done_criteria?.trim()) return null;
-  if (!d.executor || !DECISION_ENGINES.has(d.executor.engine) || !validModelForEngine(d.executor.engine, d.executor.model)) {
-    return null;
+  // Only `implement` actually dispatches to decision.executor (analyst/reviewer
+  // engines come from the code tables) — a sloppy executor on done/ask_human/test
+  // shouldn't kill an otherwise valid decision.
+  let executor = d.executor;
+  if (!executor || !DECISION_ENGINES.has(executor.engine) || !validModelForEngine(executor.engine, executor.model)) {
+    if (d.action === 'implement') return null;
+    executor = { engine: 'claude', model: 'sonnet' };
   }
-  if (d.executor.engine === 'gemini' && WRITE_ACTIONS.has(d.action)) return null; // text-only can't touch files
+  if (executor.engine === 'gemini' && WRITE_ACTIONS.has(d.action)) return null; // text-only can't touch files
   const openQuestions = Array.isArray(d.open_questions) ? d.open_questions : [];
   if (d.action === 'implement' && openQuestions.length > 0) return null; // must ask_human instead
   return {
@@ -246,7 +251,7 @@ function tryDecision(text: string): Decision | null {
     non_goals: d.non_goals ?? '',
     constraints: d.constraints ?? '',
     complexity: d.complexity === 'medium' || d.complexity === 'hard' ? d.complexity : 'trivial',
-    executor: d.executor,
+    executor,
     rationale: d.rationale ?? '',
     done_criteria: d.done_criteria,
     open_questions: openQuestions,
@@ -262,8 +267,11 @@ function summarize(text: string): string {
   return (para ?? text).trim().replace(/\s+/g, ' ').slice(0, 400);
 }
 
+/** Sentinel failure note — phaseVerifying keys off it to skip review/diagnosis when nothing changed. */
+const NO_PROGRESS_NOTE = 'исполнитель не внёс изменений в рабочее дерево';
+
 function summarizeFailure(test: TestResult, notes: ReviewNote[], madeProgress: boolean): string {
-  if (!madeProgress) return 'исполнитель не внёс изменений в рабочее дерево';
+  if (!madeProgress) return NO_PROGRESS_NOTE;
   const parts: string[] = [];
   if (!test.passed) parts.push(`тесты упали (${test.failed.slice(0, 3).join('; ') || test.command})`);
   const bugs = notes.filter((n) => n.severity === 'BUG');
@@ -346,6 +354,12 @@ function toGatePayload(state: LoopState, decision: Decision): GatePayload {
   };
 }
 
+/** Records a human-authored note both in prompt context (`humanNotes`) and the live feed (`onNote`) — the composer used to swallow these silently. */
+function pushHumanNote(state: LoopState, note: string): void {
+  state.humanNotes.push(note);
+  publish(state.project, (l) => l.onNote(note));
+}
+
 function recordIteration(state: LoopState, it: Omit<Iteration, 'n' | 'ts'>): void {
   const full: Iteration = { ...it, n: state.iterations.length + 1, ts: new Date().toISOString() };
   state.iterations.push(full);
@@ -356,7 +370,7 @@ function checkBudget(state: LoopState): void {
   if (state.iterations.length >= state.budget.maxIterations) {
     throw new Error(`Превышен лимит итераций (${state.budget.maxIterations})`);
   }
-  if (Date.now() - Date.parse(state.createdAt) >= state.budget.deadlineMs) {
+  if (Date.now() - Date.parse(state.budgetResumedAt ?? state.createdAt) >= state.budget.deadlineMs) {
     throw new Error(`Превышен дедлайн loop (${Math.round(state.budget.deadlineMs / 60_000)} мин)`);
   }
 }
@@ -515,7 +529,9 @@ async function runDiagnosis(state: LoopState, test: TestResult, notes: ReviewNot
 async function applyDecision(state: LoopState, decision: Decision): Promise<LoopState> {
   if (decision.action === 'done' && state.verifiedDiffSha !== state.currentDiffSha) {
     // Policy guard (spec §4): refuse an unverified close, force one more review instead.
-    state.humanNotes.push('[policy] отказано в done: последние правки не прошли verify — повторяю review.');
+    // Goes into lastFailureNote, not humanNotes — a note there would sit in every
+    // future manager prompt and accumulate on each refusal.
+    state.lastFailureNote = 'policy: отказано в done — последние правки ещё не прошли test+review';
     decision = { ...decision, action: 'review' };
   }
 
@@ -547,6 +563,25 @@ async function applyDecision(state: LoopState, decision: Decision): Promise<Loop
     }
     case 'review': {
       state.reviewNotes = await runReview(state);
+      const bugs = state.reviewNotes.filter((n) => n.severity === 'BUG');
+      if (bugs.length) {
+        state.lastFailureNote = `ревью: ${bugs.slice(0, 3).map((b) => `${b.file}:${b.line} — ${b.msg}`).join('; ')}`;
+      } else {
+        // Tests are token-free, so a clean review runs them right here and, on
+        // green, marks the diff verified — otherwise verifiedDiffSha never
+        // catches up and the done-guard above rejects every close forever.
+        const test = await runTests(state);
+        state.testResults = [...state.testResults, test].slice(-20);
+        recordIteration(state, {
+          role: 'tester',
+          phase: state.status,
+          summary: test.command ? `${test.command}: ${test.passed ? 'OK' : 'FAIL'}` : 'тестов не найдено',
+        });
+        if (test.passed) {
+          state.verifiedDiffSha = state.currentDiffSha;
+          state.lastFailureNote = null;
+        }
+      }
       const redecided = await runManagerDecision(state);
       return applyDecision(redecided.state, redecided.decision);
     }
@@ -606,7 +641,7 @@ async function phaseImplementing(state: LoopState): Promise<LoopState> {
   const sha = diffSha(diff);
   const madeProgress = sha !== state.currentDiffSha;
   state.currentDiffSha = sha;
-  state.lastFailureNote = madeProgress ? null : 'исполнитель не внёс изменений в рабочее дерево';
+  state.lastFailureNote = madeProgress ? null : NO_PROGRESS_NOTE;
 
   recordIteration(state, {
     role: 'executor',
@@ -623,7 +658,7 @@ async function phaseImplementing(state: LoopState): Promise<LoopState> {
 async function phaseVerifying(state: LoopState): Promise<LoopState> {
   checkBudget(state);
 
-  const madeProgress = state.lastFailureNote !== 'исполнитель не внёс изменений в рабочее дерево';
+  const madeProgress = state.lastFailureNote !== NO_PROGRESS_NOTE;
 
   const test = await runTests(state);
   state.testResults = [...state.testResults, test].slice(-20);
@@ -700,6 +735,12 @@ async function runPhase(state: LoopState): Promise<LoopState> {
 
 const WAITING_OR_TERMINAL = new Set<Phase>(['idle', 'awaiting_approval', 'done', 'failed', 'stopped']);
 const driving = new Set<string>();
+/**
+ * Stop requests that landed while no killable engine call was in flight (e.g.
+ * during `npm test`): the running phase mutates the same cached state object
+ * and would silently overwrite the 'stopped' status `stopLoop` persisted.
+ */
+const stopRequests = new Set<string>();
 
 function kick(project: string): void {
   if (driving.has(project)) return;
@@ -711,6 +752,7 @@ async function runLoop(project: string): Promise<void> {
   for (;;) {
     const state = await loopStore.loadLoop(project);
     if (!state || WAITING_OR_TERMINAL.has(state.status)) {
+      stopRequests.delete(project);
       if (state) publish(project, (l) => l.onPhase(state.status));
       return;
     }
@@ -719,7 +761,10 @@ async function runLoop(project: string): Promise<void> {
     try {
       next = await runPhase(state);
     } catch (err) {
-      if (err instanceof LoopStoppedError) return; // stopLoop already persisted 'stopped'
+      if (err instanceof LoopStoppedError) {
+        stopRequests.delete(project);
+        return; // stopLoop already persisted 'stopped'
+      }
       const failed = await loopStore.loadLoop(project);
       if (failed) {
         failed.status = 'failed';
@@ -730,6 +775,9 @@ async function runLoop(project: string): Promise<void> {
       publish(project, (l) => l.onPhase('failed'));
       return;
     }
+
+    // A stop that arrived mid-phase outside an engine call must win over the phase's result.
+    if (stopRequests.delete(project)) next.status = 'stopped';
 
     await loopStore.saveLoop(next);
     publish(project, (l) => l.onPhase(next.status));
@@ -803,11 +851,13 @@ export async function startLoop(
     consecutiveFailsAtTier: 0,
     lastFailureNote: null,
     budget: { maxIterations: MAX_ITERATIONS, maxFixRounds: MAX_FIX_ROUNDS, deadlineMs: DEADLINE_MS },
+    budgetResumedAt: now,
     iterations: [],
     createdAt: now,
     updatedAt: now,
   };
   await loopStore.saveLoop(state);
+  stopRequests.delete(project); // a stale flag from the previous run must not kill this one
   kick(project);
   return state;
 }
@@ -831,13 +881,18 @@ export async function approveGate(
   if (!state || state.status !== 'awaiting_approval' || !state.pendingDecision) {
     throw new Error('Нет открытого гейта для этого проекта');
   }
-  if (decision.note?.trim()) state.humanNotes.push(decision.note.trim());
+  if (decision.note?.trim()) pushHumanNote(state, decision.note.trim());
+  state.budgetResumedAt = new Date().toISOString(); // gate wait time doesn't count against the deadline
 
   const pending: Decision = { ...state.pendingDecision, ...decision.edit };
   state.pendingDecision = null;
 
   if (pending.action === 'implement' && decision.approve) {
-    state.checkpointSha = await currentCommit(project).catch(() => null);
+    // The escalation rollback is `reset --hard <checkpoint>`, and the checkpoint is
+    // HEAD — on a dirty tree that would also wipe pre-existing user changes and
+    // earlier verified (uncommitted) loop work. Only arm it when the tree is clean.
+    const dirtyAtApprove = Boolean((await workingDiff(project).catch(() => ' ')).trim());
+    state.checkpointSha = dirtyAtApprove ? null : await currentCommit(project).catch(() => null);
     state.activeDecision = pending;
     state.executor = pending.executor;
     state.tier = pending.complexity;
@@ -858,6 +913,7 @@ export async function approveGate(
   try {
     const redecided = await runManagerDecision(state);
     const next = await applyDecision(redecided.state, redecided.decision);
+    if (stopRequests.delete(project)) next.status = 'stopped'; // same mid-phase stop race as runLoop
     await loopStore.saveLoop(next);
     publish(project, (l) => l.onPhase(next.status));
     if (next.status === 'done') publish(project, (l) => l.onDone(next));
@@ -877,14 +933,15 @@ export async function postHumanNote(project: string, note: string): Promise<void
   if (!trimmed) return;
   const state = await loopStore.loadLoop(project);
   if (!state) throw new Error('Нет активного loop для этого проекта');
-  state.humanNotes.push(trimmed);
+  pushHumanNote(state, trimmed);
   await loopStore.saveLoop(state);
 }
 
 export async function stopLoop(project: string): Promise<void> {
-  cancels.get(project)?.();
   const state = await loopStore.loadLoop(project);
   if (!state || state.status === 'done') return;
+  stopRequests.add(project);
+  cancels.get(project)?.();
   state.status = 'stopped';
   await loopStore.saveLoop(state);
   publish(project, (l) => l.onPhase('stopped'));

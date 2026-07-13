@@ -43,6 +43,9 @@ const ROLE_LABEL: Record<LoopIteration['role'], string> = {
 const ACTIVE_STATUSES: LoopState['status'][] = ['analyzing', 'implementing', 'verifying', 'aggregating']
 const TERMINAL_STATUSES: LoopState['status'][] = ['idle', 'done', 'failed', 'stopped']
 
+/** Turns and human notes share one feed so a sent chat message shows up instead of just disappearing into `humanNotes`. */
+type FeedItem = { kind: 'turn'; it: LoopIteration } | { kind: 'note'; id: number; text: string }
+
 function gateFromDecision(d: LoopDecision, planPath: string): LoopGatePayload {
   return {
     task: d.task,
@@ -57,6 +60,7 @@ export default function ManagerPanel({ projectId, startRequest, onStartRequestHa
   const [open, setOpen] = useState(false)
   const [state, setState] = useState<LoopState | null>(null)
   const [gate, setGate] = useState<LoopGatePayload | null>(null)
+  const [feed, setFeed] = useState<FeedItem[]>([])
   const [liveText, setLiveText] = useState('')
   const [goalInput, setGoalInput] = useState('')
   const [noteInput, setNoteInput] = useState('')
@@ -82,6 +86,7 @@ export default function ManagerPanel({ projectId, startRequest, onStartRequestHa
           break
         case 'turn':
           setState((prev) => (prev ? { ...prev, iterations: [...prev.iterations, e.it] } : prev))
+          setFeed((prev) => [...prev, { kind: 'turn', it: e.it }])
           setLiveText('')
           break
         case 'text':
@@ -92,6 +97,9 @@ export default function ManagerPanel({ projectId, startRequest, onStartRequestHa
           setEditTask(e.gate.task)
           setState((prev) => (prev ? { ...prev, status: 'awaiting_approval' } : prev))
           setOpen(true)
+          break
+        case 'note':
+          setFeed((prev) => [...prev, { kind: 'note', id: prev.length, text: e.note }])
           break
         case 'done':
           fetchLoop(projectId).then(setState).catch(() => {})
@@ -106,6 +114,7 @@ export default function ManagerPanel({ projectId, startRequest, onStartRequestHa
       .then((s) => {
         if (cancelled) return
         setState(s)
+        setFeed(s ? s.iterations.map((it) => ({ kind: 'turn' as const, it })) : [])
         if (s?.status === 'awaiting_approval' && s.pendingDecision) {
           const g = gateFromDecision(s.pendingDecision, s.planPath)
           setGate(g)
@@ -125,7 +134,7 @@ export default function ManagerPanel({ projectId, startRequest, onStartRequestHa
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight })
-  }, [state?.iterations.length, liveText])
+  }, [feed.length, liveText])
 
   const canStart = !state || TERMINAL_STATUSES.includes(state.status)
 
@@ -136,6 +145,7 @@ export default function ManagerPanel({ projectId, startRequest, onStartRequestHa
     try {
       const s = await startLoop(projectId, goal, taskSourceLine)
       setState(s)
+      setFeed([])
       setGoalInput('')
       setOpen(true)
     } catch (e) {
@@ -249,19 +259,37 @@ export default function ManagerPanel({ projectId, startRequest, onStartRequestHa
           <>
             <div className="manager-goal">{state.goal}</div>
 
+            {(state.status === 'implementing' || state.status === 'verifying') && state.fixRounds > 0 && (
+              <div className="manager-retry-hint">
+                Попытка {state.fixRounds}/{state.budget.maxFixRounds} · сложность: {state.tier}
+                {state.lastFailureNote ? ` · ${state.lastFailureNote}` : ''}
+              </div>
+            )}
+
             <div className="manager-feed" ref={scrollRef}>
-              {state.iterations.length === 0 && !liveText && (
+              {feed.length === 0 && !liveText && (
                 <p className="manager-empty">Пока ни одного хода.</p>
               )}
-              {state.iterations.map((it) => (
-                <div key={it.n} className={`manager-turn manager-turn-${it.role}`}>
-                  <div className="manager-turn-head">
-                    <span className="manager-turn-role">{ROLE_LABEL[it.role]}</span>
-                    {it.engine && <span className="manager-turn-engine">{it.engine.engine}/{it.engine.model}</span>}
+              {feed.map((item) =>
+                item.kind === 'turn' ? (
+                  <div key={`turn-${item.it.n}`} className={`manager-turn manager-turn-${item.it.role}`}>
+                    <div className="manager-turn-head">
+                      <span className="manager-turn-role">{ROLE_LABEL[item.it.role]}</span>
+                      {item.it.engine && (
+                        <span className="manager-turn-engine">{item.it.engine.engine}/{item.it.engine.model}</span>
+                      )}
+                    </div>
+                    <div className="manager-turn-summary">{item.it.summary}</div>
                   </div>
-                  <div className="manager-turn-summary">{it.summary}</div>
-                </div>
-              ))}
+                ) : (
+                  <div key={`note-${item.id}`} className="manager-turn manager-note">
+                    <div className="manager-turn-head">
+                      <span className="manager-turn-role">Вы</span>
+                    </div>
+                    <div className="manager-turn-summary">{item.text}</div>
+                  </div>
+                )
+              )}
               {liveText && (
                 <div className="manager-turn manager-turn-live">
                   <div className="manager-turn-head">

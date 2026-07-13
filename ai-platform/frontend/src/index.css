@@ -1992,6 +1992,14 @@ button {
   border-bottom: 1px solid var(--line);
 }
 
+.manager-retry-hint {
+  padding: 6px 16px;
+  font-size: 0.72rem;
+  color: var(--brass);
+  background: rgba(255, 191, 0, 0.06);
+  border-bottom: 1px solid var(--line);
+}
+
 .manager-feed {
   flex: 1;
   overflow-y: auto;
@@ -2023,6 +2031,7 @@ button {
 .manager-turn-tester { border-left-color: var(--green); }
 .manager-turn-reviewer { border-left-color: var(--red); }
 .manager-turn-live { border-left-color: var(--brass); opacity: 0.85; }
+.manager-note { border-left-color: var(--text-dim); background: var(--bg-2); }
 
 .manager-turn-head {
   display: flex;
