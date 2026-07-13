@@ -5,6 +5,9 @@ export interface Project {
   hasGit: boolean
   lastActivity: string | null
   running: boolean
+  favorite: boolean
+  /** When the project page was last opened here; null if never. */
+  lastOpened: string | null
 }
 
 export interface ContainerState {
@@ -26,9 +29,20 @@ export interface ClaudeEvent {
   project: string
 }
 
+export type AgentId = 'claude' | 'opencode'
+
+export interface AgentInfo {
+  id: AgentId
+  label: string
+  version: string
+  /** Whether the agent can be handed a task on the command line. */
+  supportsPrompt: boolean
+}
+
 export interface StartSessionOptions {
   mode?: 'continue'
   prompt?: string
+  agent?: AgentId
 }
 
 export const NOVNC_PORT = 9901
@@ -79,12 +93,40 @@ export function fetchSystemStatus(): Promise<SystemStatus> {
   return request<SystemStatus>('/api/system/status')
 }
 
+export interface ServerTime {
+  /** The server's wall clock at the moment it answered. */
+  iso: string
+  /** IANA zone of the server, so the header renders its clock and not the viewer's. */
+  timeZone: string
+}
+
+export function getServerTime(): Promise<ServerTime> {
+  return request<ServerTime>('/api/system/time')
+}
+
 export function getProject(id: string): Promise<Project> {
   return request<Project>(`/api/projects/${id}`)
 }
 
 export function deleteProject(id: string): Promise<void> {
   return request<void>(`/api/projects/${id}`, { method: 'DELETE' })
+}
+
+/** Records the project as opened now, which is what the dashboard sorts on. */
+export function markProjectOpened(id: string): Promise<{ lastOpened: string }> {
+  return request<{ lastOpened: string }>(`/api/projects/${id}/open`, { method: 'POST' })
+}
+
+export function setProjectFavorite(id: string, favorite: boolean): Promise<{ favorite: boolean }> {
+  return request<{ favorite: boolean }>(`/api/projects/${id}/favorite`, {
+    method: 'PUT',
+    body: JSON.stringify({ favorite }),
+  })
+}
+
+/** Agents actually installed in the Claude container, newest status cached server-side. */
+export function fetchAgents(): Promise<AgentInfo[]> {
+  return request<{ agents: AgentInfo[] }>('/api/system/agents').then((r) => r.agents)
 }
 
 export function fetchFiles(id: string): Promise<FileItem[]> {
@@ -121,21 +163,9 @@ export function saveChecklistFile(id: string, file: string, content: string): Pr
   return saveFileContent(id, file, content)
 }
 
-export interface UsageReport {
-  /** null when the project has no Claude session on disk yet. */
-  contextTokens: number | null
-  windowTokens: number
-  outputTokens: number
-  model: string
-  updatedAt: string | null
-}
-
-export function getUsage(id: string): Promise<UsageReport> {
-  return request<UsageReport>(`/api/projects/${id}/usage`)
-}
-
-export function startSession(id: string, opts: StartSessionOptions = {}): Promise<{ sessionId: string }> {
-  return request<{ sessionId: string }>(`/api/projects/${id}/session/start`, {
+/** Reports back the agent it actually started, which may differ from the request. */
+export function startSession(id: string, opts: StartSessionOptions = {}): Promise<{ sessionId: string; agent: AgentId }> {
+  return request<{ sessionId: string; agent: AgentId }>(`/api/projects/${id}/session/start`, {
     method: 'POST',
     body: JSON.stringify(opts),
   })
@@ -145,8 +175,8 @@ export function stopSession(id: string): Promise<void> {
   return request<void>(`/api/projects/${id}/session/stop`, { method: 'POST' })
 }
 
-export function getSessionStatus(id: string): Promise<{ running: boolean; sessionId?: string }> {
-  return request<{ running: boolean; sessionId?: string }>(`/api/projects/${id}/session/status`)
+export function getSessionStatus(id: string): Promise<{ running: boolean; sessionId?: string; agent: AgentId }> {
+  return request<{ running: boolean; sessionId?: string; agent: AgentId }>(`/api/projects/${id}/session/status`)
 }
 
 export function getGitStatus(id: string): Promise<{ text: string; branch: string }> {
@@ -203,6 +233,14 @@ export function gitPull(id: string): Promise<string> {
 
 export function gitPush(id: string): Promise<string> {
   return request<{ output: string }>(`/api/projects/${id}/git/push`, { method: 'POST' }).then((r) => r.output)
+}
+
+/** Asks Claude for a one-line commit message describing the uncommitted diff. */
+export function generateCommitMessage(id: string, signal?: AbortSignal): Promise<string> {
+  return request<{ message: string }>(`/api/projects/${id}/commit-message`, {
+    method: 'POST',
+    signal,
+  }).then((r) => r.message)
 }
 
 export function fetchEvents(): Promise<ClaudeEvent[]> {

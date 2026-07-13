@@ -1,6 +1,6 @@
 import type { WebSocket } from 'ws';
 import * as pty from 'node-pty';
-import { tmuxSessionName, UTF8_EXEC_ENV } from '../services/dockerService';
+import { tmuxSessionName, UTF8_EXEC_ENV, EXEC_USER_ARGS } from '../services/dockerService';
 import { isValidProjectName } from '../services/projectService';
 
 interface TerminalMessage {
@@ -40,7 +40,7 @@ export function handleTerminalWebSocket(ws: WebSocket, sessionId: string): void 
   try {
     // UTF8_EXEC_ENV is what lets readline echo typed Cyrillic; in the C locale bash
     // mangles the leading byte of every multi-byte character.
-    term = pty.spawn('docker', ['exec', '-it', ...UTF8_EXEC_ENV, CONTAINER_NAME, 'bash', '-c', shellCmd], {
+    term = pty.spawn('docker', ['exec', '-it', ...EXEC_USER_ARGS, ...UTF8_EXEC_ENV, CONTAINER_NAME, 'bash', '-c', shellCmd], {
       name: 'xterm-256color',
       cols: 80,
       rows: 24,

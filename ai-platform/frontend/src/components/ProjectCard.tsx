@@ -6,12 +6,23 @@ interface ProjectCardProps {
   attention?: 'waiting' | 'done'
   onOpen: () => void
   onDelete: () => void
+  onToggleFavorite: () => void
 }
 
-export default function ProjectCard({ project, sessionRunning, attention, onOpen, onDelete }: ProjectCardProps) {
+export default function ProjectCard({ project, sessionRunning, attention, onOpen, onDelete, onToggleFavorite }: ProjectCardProps) {
   return (
     <div className="project-card">
-      <h3>{project.name}</h3>
+      <div className="project-card-head">
+        <h3>{project.name}</h3>
+        <button
+          className={`favorite-toggle ${project.favorite ? 'is-favorite' : ''}`}
+          onClick={onToggleFavorite}
+          title={project.favorite ? 'Убрать из избранного' : 'В избранное'}
+          aria-pressed={project.favorite}
+        >
+          {project.favorite ? '★' : '☆'}
+        </button>
+      </div>
       <div className="project-path">{project.path}</div>
       <div className="project-meta">
         <span>{project.size}</span>
@@ -25,8 +36,16 @@ export default function ProjectCard({ project, sessionRunning, attention, onOpen
         {sessionRunning && attention === 'waiting' && (
           <span className="badge badge-waiting">⏳ Claude ждёт</span>
         )}
-        {project.lastActivity && (
-          <span className="muted">Last: {new Date(project.lastActivity).toLocaleString()}</span>
+        {project.lastOpened ? (
+          <span className="muted" title="Последнее открытие в платформе">
+            Открыт: {new Date(project.lastOpened).toLocaleString()}
+          </span>
+        ) : (
+          project.lastActivity && (
+            <span className="muted" title="Последнее изменение папки проекта">
+              Изменён: {new Date(project.lastActivity).toLocaleString()}
+            </span>
+          )
         )}
       </div>
       <div className="project-actions">

@@ -12,7 +12,7 @@ ENV LC_ALL=C.UTF-8
 
 RUN apt-get update && apt-get install -y \
     curl ca-certificates gnupg sudo git vim tmux \
-    xz-utils \
+    xz-utils gosu \
     && rm -rf /var/lib/apt/lists/*
 
 # Node.js 22
@@ -23,7 +23,22 @@ RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && \
 # Claude Code CLI
 RUN npm install -g @anthropic-ai/claude-code
 
-RUN useradd -m -s /bin/bash claude && \
+# opencode: a second coding agent, so a project is not tied to one model vendor.
+# It keeps its own auth per provider (`opencode auth login`) under the XDG dirs
+# below, both of which are mounted as volumes in docker-compose.
+RUN npm install -g opencode-ai
+
+# /workspace is a bind mount, and a bind mount carries the host's numeric uid/gid
+# straight through: a file written here as uid 0 is root-owned on the host too, and
+# the host user cannot edit it (WebStorm reports "failed to change read-only status").
+# Building `claude` with the host's ids makes ownership line up on both sides.
+# ubuntu:24.04 ships its own `ubuntu` user squatting on uid 1000, so it goes first.
+ARG HOST_UID=1000
+ARG HOST_GID=1000
+
+RUN if id ubuntu >/dev/null 2>&1; then userdel -r ubuntu; fi && \
+    if ! getent group ${HOST_GID} >/dev/null; then groupadd -g ${HOST_GID} claude; fi && \
+    useradd -m -u ${HOST_UID} -g ${HOST_GID} -s /bin/bash claude && \
     echo "claude:claude" | chpasswd && \
     usermod -aG sudo claude && \
     echo "claude ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers

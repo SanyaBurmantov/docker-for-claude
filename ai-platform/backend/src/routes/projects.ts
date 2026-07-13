@@ -6,6 +6,7 @@ import { spawn } from 'child_process';
 import multer from 'multer';
 import { scanProjects, getProjectInfo, listFilesRecursive, readProjectFile, writeProjectFile, isValidProjectName, isPathSafe } from '../services/projectService';
 import { execInContainer, tmuxSessionName } from '../services/dockerService';
+import { getAll, metaFor, remove as removeMeta, update as updateMeta } from '../services/metadataService';
 
 const router = Router();
 
@@ -44,7 +45,14 @@ router.get('/', async (_req, res) => {
       sessions = [];
     }
 
-    res.json(projects.map((p) => ({ ...p, running: sessions.includes(tmuxSessionName(p.name)) })));
+    const meta = await getAll();
+
+    res.json(
+      projects.map((p) => {
+        const { favorite, lastOpened } = metaFor(meta, p.name);
+        return { ...p, running: sessions.includes(tmuxSessionName(p.name)), favorite, lastOpened };
+      })
+    );
   } catch (err) {
     res.status(500).json({ error: String(err) });
   }
@@ -93,6 +101,8 @@ router.delete('/:id', async (req: Request<{ id: string }>, res: Response) => {
       return;
     }
     await fs.rm(projectPath, { recursive: true, force: true });
+    // Otherwise a project recreated under the same name inherits the old pin
+    await removeMeta(req.params.id).catch(() => {});
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: String(err) });
@@ -102,7 +112,40 @@ router.delete('/:id', async (req: Request<{ id: string }>, res: Response) => {
 router.get('/:id', async (req: Request<{ id: string }>, res: Response) => {
   try {
     const info = await getProjectInfo(req.params.id);
-    res.json(info);
+    const { favorite, lastOpened } = metaFor(await getAll(), req.params.id);
+    res.json({ ...info, favorite, lastOpened });
+  } catch (err) {
+    res.status(500).json({ error: String(err) });
+  }
+});
+
+/** The project page reports itself opened; the dashboard sorts on this. */
+router.post('/:id/open', async (req: Request<{ id: string }>, res: Response) => {
+  try {
+    if (!existsSync(path.join(WORKSPACE_DIR, req.params.id))) {
+      res.status(404).json({ error: 'Project not found' });
+      return;
+    }
+    const meta = await updateMeta(req.params.id, { lastOpened: new Date().toISOString() });
+    res.json({ lastOpened: meta.lastOpened });
+  } catch (err) {
+    res.status(500).json({ error: String(err) });
+  }
+});
+
+router.put('/:id/favorite', async (req: Request<{ id: string }>, res: Response) => {
+  try {
+    const { favorite } = req.body ?? {};
+    if (typeof favorite !== 'boolean') {
+      res.status(400).json({ error: 'favorite must be a boolean' });
+      return;
+    }
+    if (!existsSync(path.join(WORKSPACE_DIR, req.params.id))) {
+      res.status(404).json({ error: 'Project not found' });
+      return;
+    }
+    const meta = await updateMeta(req.params.id, { favorite });
+    res.json({ favorite: meta.favorite });
   } catch (err) {
     res.status(500).json({ error: String(err) });
   }

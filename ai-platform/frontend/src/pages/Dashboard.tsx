@@ -1,11 +1,24 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { fetchProjects, addProject, deleteProject, Project } from '../services/api'
+import { fetchProjects, addProject, deleteProject, setProjectFavorite, Project } from '../services/api'
 import ProjectCard from '../components/ProjectCard'
 import SystemStatus from '../components/SystemStatus'
 import Modal, { ConfirmDialog } from '../components/Modal'
 import { useToast } from '../components/Toast'
 import { useAttention } from '../components/ClaudeEvents'
+
+/**
+ * Recency of a project: when it was last opened here, or — for one never opened
+ * from the platform — when its directory last changed. Both are ISO strings, so
+ * they sort as text; a project with neither sinks to the bottom.
+ */
+function recency(project: Project): string {
+  return project.lastOpened ?? project.lastActivity ?? ''
+}
+
+function byRecency(a: Project, b: Project): number {
+  return recency(b).localeCompare(recency(a))
+}
 
 export default function Dashboard() {
   const [projects, setProjects] = useState<Project[]>([])
@@ -37,6 +50,14 @@ export default function Dashboard() {
     const interval = setInterval(loadProjects, 5000)
     return () => clearInterval(interval)
   }, [loadProjects])
+
+  const { favorites, rest } = useMemo(() => {
+    const sorted = [...projects].sort(byRecency)
+    return {
+      favorites: sorted.filter((p) => p.favorite),
+      rest: sorted.filter((p) => !p.favorite),
+    }
+  }, [projects])
 
   async function handleAddProject() {
     // Derive the name from the git URL when the name field is left empty
@@ -75,6 +96,18 @@ export default function Dashboard() {
     }
   }
 
+  async function handleToggleFavorite(project: Project) {
+    const favorite = !project.favorite
+    // The 5s poll would otherwise hold the old star until the next round trip.
+    setProjects((prev) => prev.map((p) => (p.name === project.name ? { ...p, favorite } : p)))
+    try {
+      await setProjectFavorite(project.name, favorite)
+    } catch (e) {
+      toast('error', `Не сохранилось: ${e instanceof Error ? e.message : 'Unknown error'}`)
+      await loadProjects()
+    }
+  }
+
   if (loading && projects.length === 0) {
     return <div className="loading">Loading projects...</div>
   }
@@ -93,18 +126,40 @@ export default function Dashboard() {
       {projects.length === 0 ? (
         <div className="no-changes">Place project folders in the directory configured in .env (PROJECTS_DIR), or add one above.</div>
       ) : (
-        <div className="projects-grid">
-          {projects.map((project) => (
-            <ProjectCard
-              key={project.name}
-              project={project}
-              sessionRunning={project.running}
-              attention={attention[project.name]}
-              onOpen={() => navigate(`/project/${project.name}?start=1`)}
-              onDelete={() => setDeleteTarget(project.name)}
-            />
-          ))}
-        </div>
+        <>
+          {favorites.length > 0 && (
+            <section className="project-group project-group-favorites">
+              <h2 className="project-group-title">★ Избранные</h2>
+              <div className="projects-grid">
+                {favorites.map((project) => (
+                  <ProjectCard
+                    key={project.name}
+                    project={project}
+                    sessionRunning={project.running}
+                    attention={attention[project.name]}
+                    onOpen={() => navigate(`/project/${project.name}?start=1`)}
+                    onDelete={() => setDeleteTarget(project.name)}
+                    onToggleFavorite={() => handleToggleFavorite(project)}
+                  />
+                ))}
+              </div>
+            </section>
+          )}
+
+          <div className="projects-grid">
+            {rest.map((project) => (
+              <ProjectCard
+                key={project.name}
+                project={project}
+                sessionRunning={project.running}
+                attention={attention[project.name]}
+                onOpen={() => navigate(`/project/${project.name}?start=1`)}
+                onDelete={() => setDeleteTarget(project.name)}
+                onToggleFavorite={() => handleToggleFavorite(project)}
+              />
+            ))}
+          </div>
+        </>
       )}
 
       {showAdd && (

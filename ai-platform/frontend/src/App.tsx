@@ -2,6 +2,7 @@ import { Routes, Route, Link } from 'react-router-dom'
 import Dashboard from './pages/Dashboard'
 import ProjectPage from './pages/ProjectPage'
 import GeminiPanel from './components/GeminiPanel'
+import Clock from './components/Clock'
 import { novncUrl } from './services/api'
 
 function App() {
@@ -12,6 +13,7 @@ function App() {
         <div className="navbar-links">
           <Link to="/" className="nav-link">Projects</Link>
           <a href={novncUrl()} className="nav-link" target="_blank" rel="noopener noreferrer">noVNC</a>
+          <Clock />
         </div>
       </nav>
       <main className="main-content">

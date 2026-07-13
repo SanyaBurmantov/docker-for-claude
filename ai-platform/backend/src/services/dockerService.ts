@@ -8,11 +8,21 @@ export const docker = new Dockerode({ socketPath: '/var/run/docker.sock' });
 // Passing them per-exec makes UTF-8 independent of when the image was built.
 export const UTF8_EXEC_ENV = ['-e', 'LANG=C.UTF-8', '-e', 'LC_ALL=C.UTF-8'];
 
+// Without -u, exec runs as root and every file the agent creates in the bind-mounted
+// /workspace lands on the host owned by root, where the host user cannot edit it.
+// `claude` is built with the host's uid, so the ownership survives the mount.
+// It also pins tmux to one socket: root and claude would each get their own server,
+// and a session started by one would be invisible to the other.
+export const EXEC_USER = process.env.CONTAINER_USER || 'claude';
+export const EXEC_USER_ARGS = ['-u', EXEC_USER];
+
 export async function execInContainer(containerName: string, cmd: string): Promise<string> {
   return new Promise((resolve, reject) => {
-    const child = spawn('docker', ['exec', ...UTF8_EXEC_ENV, containerName, 'bash', '-c', cmd], {
-      stdio: ['pipe', 'pipe', 'pipe'],
-    });
+    const child = spawn(
+      'docker',
+      ['exec', ...EXEC_USER_ARGS, ...UTF8_EXEC_ENV, containerName, 'bash', '-c', cmd],
+      { stdio: ['pipe', 'pipe', 'pipe'] }
+    );
 
     // Chunk boundaries land on arbitrary byte offsets, so decoding each chunk on its
     // own tears multi-byte characters in half and yields U+FFFD. Decode once, at the end.
@@ -44,7 +54,7 @@ export async function execInContainer(containerName: string, cmd: string): Promi
 export function execInContainerSync(containerName: string, cmd: string): string {
   try {
     return execSync(
-      `docker exec ${UTF8_EXEC_ENV.join(' ')} ${containerName} bash -c ${JSON.stringify(cmd)}`,
+      `docker exec ${EXEC_USER_ARGS.join(' ')} ${UTF8_EXEC_ENV.join(' ')} ${containerName} bash -c ${JSON.stringify(cmd)}`,
       { encoding: 'utf-8' }
     ).trimEnd();
   } catch (err: unknown) {

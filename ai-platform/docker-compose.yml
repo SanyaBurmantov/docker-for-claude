@@ -25,7 +25,14 @@ services:
     restart: unless-stopped
 
   claude-container:
-    build: ./claude-container
+    build:
+      context: ./claude-container
+      # Baked into the image, not set at runtime: the `claude` user must already own
+      # its home directory when the container starts. Change HOST_UID/HOST_GID and you
+      # must rebuild, not just restart.
+      args:
+        HOST_UID: ${HOST_UID:-1000}
+        HOST_GID: ${HOST_GID:-1000}
     image: ai-claude
     container_name: ai-claude
     network_mode: "service:proxy-gateway"
@@ -39,6 +46,10 @@ services:
     volumes:
       - ${PROJECTS_DIR}:/workspace
       - claude-auth:/home/claude/.claude
+      # opencode splits state the same way Claude Code does: provider tokens and
+      # sessions under the data dir, opencode.json under the config dir.
+      - opencode-data:/home/claude/.local/share/opencode
+      - opencode-config:/home/claude/.config/opencode
     stdin_open: true
     tty: true
     restart: unless-stopped
@@ -63,22 +74,38 @@ services:
     restart: unless-stopped
 
   backend:
-    build: ./backend
+    build:
+      context: ./backend
+      args:
+        HOST_UID: ${HOST_UID:-1000}
+        HOST_GID: ${HOST_GID:-1000}
     image: ai-backend
     container_name: ai-backend
+    # Runs as the host user so files it writes into /workspace stay editable outside
+    # Docker. That costs it root's free pass to /var/run/docker.sock, so it has to
+    # join the host's docker group explicitly.
+    user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
+    group_add:
+      - "${DOCKER_GID:?set DOCKER_GID in .env — run: getent group docker | cut -d: -f3}"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ${PROJECTS_DIR}:/workspace
+      # Favourites, last-opened times and the agent picked per project. Not part
+      # of any project, so it must not live in PROJECTS_DIR.
+      - platform-data:/data
     environment:
       - PORT=3000
       - CLAUDE_CONTAINER=ai-claude
       - BROWSER_CONTAINER=ai-browser
+      - DATA_DIR=/data
       - GEMINI_API_KEY=${GEMINI_API_KEY:-}
       - GEMINI_MODEL=${GEMINI_MODEL:-gemini-3.1-flash-lite}
       - EXPLAIN_MODEL=${EXPLAIN_MODEL:-sonnet}
       - EXPLAIN_TIMEOUT_MS=${EXPLAIN_TIMEOUT_MS:-120000}
       - REVIEW_MODEL=${REVIEW_MODEL:-sonnet}
       - REVIEW_TIMEOUT_MS=${REVIEW_TIMEOUT_MS:-240000}
+      - COMMIT_MESSAGE_MODEL=${COMMIT_MESSAGE_MODEL:-sonnet}
+      - COMMIT_MESSAGE_TIMEOUT_MS=${COMMIT_MESSAGE_TIMEOUT_MS:-90000}
       # backend sits on app-net with direct egress, so unlike the claude/browser
       # containers it is not transparently proxied — it dials the proxy itself
       - PROXY_HOST=${PROXY_HOST}
@@ -111,6 +138,12 @@ services:
 
 volumes:
   claude-auth:
+    driver: local
+  opencode-data:
+    driver: local
+  opencode-config:
+    driver: local
+  platform-data:
     driver: local
   browser-profile:
     driver: local

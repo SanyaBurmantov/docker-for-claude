@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { spawn } from 'child_process';
 import { docker, execInContainer } from '../services/dockerService';
 import { claudeEvents } from '../services/claudeEvents';
+import { AGENTS, type AgentId } from '../services/agents';
 
 const router = Router();
 const CONTAINER_NAME = process.env.CLAUDE_CONTAINER || 'ai-claude';
@@ -64,9 +65,55 @@ router.get('/status', async (_req, res) => {
   }
 });
 
+// The header clock reads the platform's wall clock, not the viewer's: the browser
+// may sit in another timezone, or simply be set wrong. The zone travels with the
+// timestamp so the client can render this machine's clock rather than its own.
+router.get('/time', (_req, res) => {
+  res.json({
+    iso: new Date().toISOString(),
+    timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+  });
+});
+
+export interface AgentInfo {
+  id: AgentId;
+  label: string;
+  version: string;
+  supportsPrompt: boolean;
+}
+
+// An agent is "available" only if its binary answers --version inside the
+// container, so an image built before opencode was added keeps working.
+let agentsCache: { value: AgentInfo[]; ts: number } = { value: [], ts: 0 };
+
+router.get('/agents', async (_req, res) => {
+  if (agentsCache.value.length > 0 && Date.now() - agentsCache.ts < 60_000) {
+    res.json({ agents: agentsCache.value });
+    return;
+  }
+
+  const agents: AgentInfo[] = [];
+  for (const [id, spec] of Object.entries(AGENTS)) {
+    let version = '';
+    try {
+      version = (await execInContainer(CONTAINER_NAME, `${spec.versionCmd} 2>/dev/null || true`)).trim();
+    } catch {
+      // container down — report it as not installed rather than failing the page
+    }
+    if (version) {
+      agents.push({ id: id as AgentId, label: spec.label, version, supportsPrompt: spec.supportsPrompt });
+    }
+  }
+
+  agentsCache = { value: agents, ts: Date.now() };
+  res.json({ agents });
+});
+
 router.post('/update-claude', async (_req, res) => {
   try {
-    await execInContainer(CONTAINER_NAME, 'npm install -g @anthropic-ai/claude-code@latest');
+    // exec now runs as `claude`, who does not own /usr/lib/node_modules; sudo is
+    // passwordless in the image precisely for this.
+    await execInContainer(CONTAINER_NAME, 'sudo npm install -g @anthropic-ai/claude-code@latest');
     const version = (await execInContainer(CONTAINER_NAME, 'claude --version 2>/dev/null || echo unknown')).trim();
     versionCache = { value: version, ts: Date.now() };
     res.json({ version });

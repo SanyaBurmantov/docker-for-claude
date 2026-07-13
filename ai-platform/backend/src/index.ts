@@ -11,7 +11,7 @@ import systemRouter from './routes/system';
 import geminiRouter from './routes/gemini';
 import explainRouter from './routes/explain';
 import reviewRouter from './routes/review';
-import usageRouter from './routes/usage';
+import commitMessageRouter from './routes/commitMessage';
 import { handleEventsWebSocket } from './routes/events';
 import { claudeEvents } from './services/claudeEvents';
 
@@ -27,7 +27,7 @@ app.use('/api/projects/:id/session', sessionsRouter);
 app.use('/api/projects/:id/git', gitRouter);
 app.use('/api/projects/:id/explain', explainRouter);
 app.use('/api/projects/:id/review', reviewRouter);
-app.use('/api/projects/:id/usage', usageRouter);
+app.use('/api/projects/:id/commit-message', commitMessageRouter);
 app.use('/api/system', systemRouter);
 app.use('/api/gemini', geminiRouter);
 

@@ -1,5 +1,5 @@
 import { spawn } from 'child_process';
-import { UTF8_EXEC_ENV } from './dockerService';
+import { UTF8_EXEC_ENV, EXEC_USER_ARGS } from './dockerService';
 
 const CONTAINER_NAME = process.env.CLAUDE_CONTAINER || 'ai-claude';
 
@@ -45,6 +45,7 @@ export function streamClaude(query: ClaudeQuery, handlers: ClaudeHandlers): () =
   const child = spawn('docker', [
     'exec',
     '-i',
+    ...EXEC_USER_ARGS,
     '-w',
     `/workspace/${query.projectName}`,
     ...UTF8_EXEC_ENV,

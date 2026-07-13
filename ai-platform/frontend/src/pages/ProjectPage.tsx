@@ -1,12 +1,12 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useParams, Link, useSearchParams } from 'react-router-dom'
 import {
-  getProject, getSessionStatus, startSession, stopSession,
+  getProject, getSessionStatus, startSession, stopSession, markProjectOpened,
   getGitStatus, getGitDiff, getGitLog, getGitShow, getGitBranches,
   gitCommit, gitBranch, gitCheckout, gitPull, gitPush, gitRollback,
-  saveGitCredentials, archiveUrl, streamReview,
+  saveGitCredentials, archiveUrl, streamReview, generateCommitMessage,
   fetchChecklistFile, saveChecklistFile, TASKS_FILE, FIXES_FILE,
-  getUsage, UsageReport,
+  fetchAgents, AgentId, AgentInfo,
   Project, novncUrl, StartSessionOptions,
 } from '../services/api'
 import { parseTasks, serialize, withTasksAdded } from '../services/checklist'
@@ -45,10 +45,11 @@ function parseFindings(review: string): string[] {
     .map((line) => line.trim().replace(/^[-*]\s*/, ''))
 }
 
-const USAGE_POLL_MS = 15_000
+const DEFAULT_AGENT: AgentId = 'claude'
 
-function formatTokens(n: number): string {
-  return n.toLocaleString('ru-RU')
+/** The agent is a per-project habit, so it survives a reload of that project. */
+function agentStorageKey(id: string): string {
+  return `agent-${id}`
 }
 
 export default function ProjectPage() {
@@ -63,7 +64,14 @@ export default function ProjectPage() {
   })
   const [sessionId, setSessionId] = useState<string | null>(null)
   const [sessionRunning, setSessionRunning] = useState(false)
-  const [usage, setUsage] = useState<UsageReport | null>(null)
+  const [agents, setAgents] = useState<AgentInfo[]>([])
+  const [agent, setAgent] = useState<AgentId>(() => {
+    const saved = id ? localStorage.getItem(agentStorageKey(id)) : null
+    return saved === 'claude' || saved === 'opencode' ? saved : DEFAULT_AGENT
+  })
+  /** Which agent the running session was started with — not necessarily the picked one. */
+  const [runningAgent, setRunningAgent] = useState<AgentId>(DEFAULT_AGENT)
+  const [generatingMessage, setGeneratingMessage] = useState(false)
   const [gitStatus, setGitStatus] = useState('')
   const [currentBranch, setCurrentBranch] = useState('')
   const [gitDiff, setGitDiff] = useState('')
@@ -93,9 +101,30 @@ export default function ProjectPage() {
   const autoStarted = useRef(false)
   const toast = useToast()
 
+  const selectedAgent = agents.find((a) => a.id === agent)
+  const runningAgentLabel = agents.find((a) => a.id === runningAgent)?.label ?? runningAgent
+  // Until the agent list arrives, assume a task can be handed over; the server
+  // refuses it anyway, and refusing early would disable the button on every load.
+  const supportsPrompt = selectedAgent?.supportsPrompt ?? true
+
   useEffect(() => {
     if (id) localStorage.setItem(`active-tab-/project/${id}`, activeTab)
   }, [activeTab, id])
+
+  useEffect(() => {
+    if (id) localStorage.setItem(agentStorageKey(id), agent)
+  }, [agent, id])
+
+  // An agent missing from the container is not offered; an empty list means the
+  // container is down, and the toolbar falls back to the Claude-only layout.
+  useEffect(() => {
+    fetchAgents().then(setAgents).catch(() => setAgents([]))
+  }, [])
+
+  // The dashboard orders projects by this, so record the visit, not the click.
+  useEffect(() => {
+    if (id) markProjectOpened(id).catch(() => {})
+  }, [id])
 
   useEffect(() => {
     document.title = id ? `${id} — AI Platform` : 'AI Platform'
@@ -111,12 +140,14 @@ export default function ProjectPage() {
       getSessionStatus(id).then(async (s) => {
         let running = s.running
         if (s.sessionId) setSessionId(s.sessionId)
+        if (s.agent) setRunningAgent(s.agent)
         // "Open with Claude" passes ?start=1 to start the session right away
         if (!running && searchParams.get('start') && !autoStarted.current) {
           autoStarted.current = true
           try {
             const result = await startSession(id)
             setSessionId(result.sessionId)
+            setRunningAgent(result.agent)
             running = true
           } catch {
             // surfaced via the Start Claude button if it keeps failing
@@ -167,9 +198,10 @@ export default function ProjectPage() {
     if (!id) return
     setStarting(true)
     try {
-      const result = await startSession(id, opts)
+      const result = await startSession(id, { agent, ...opts })
       setSessionId(result.sessionId)
       setSessionRunning(true)
+      setRunningAgent(result.agent)
       setActiveTab('terminal')
     } catch (e) {
       toast('error', `Failed to start session: ${e instanceof Error ? e.message : 'Unknown error'}`)
@@ -193,7 +225,7 @@ export default function ProjectPage() {
 
   /**
    * Context lives in the tmux session, so a clean slate means killing it and
-   * launching `claude` again without --continue.
+   * launching the agent again without --continue.
    */
   async function restartSession(prompt?: string) {
     if (!id) return
@@ -203,18 +235,25 @@ export default function ProjectPage() {
       // Drop the socket before the old pty dies, so the terminal reattaches to
       // the new session instead of the corpse of the previous one.
       setSessionId(null)
-      const result = await startSession(id, prompt ? { prompt } : {})
+      const result = await startSession(id, { agent, ...(prompt ? { prompt } : {}) })
       setSessionId(result.sessionId)
       setSessionRunning(true)
+      setRunningAgent(result.agent)
       setActiveTab('terminal')
     } catch (e) {
-      toast('error', `Не удалось перезапустить Claude: ${e instanceof Error ? e.message : 'Unknown error'}`)
+      toast('error', `Не удалось перезапустить агента: ${e instanceof Error ? e.message : 'Unknown error'}`)
     } finally {
       setStarting(false)
     }
   }
 
   function requestRestart(prompt?: string) {
+    // Refused up front: restarting kills the running session first, and an agent
+    // that takes no task on the command line would leave the project with none.
+    if (prompt && !supportsPrompt) {
+      toast('error', `${selectedAgent?.label ?? agent} нельзя запустить сразу с задачей`)
+      return
+    }
     if (sessionRunning) setPendingRestart({ prompt })
     else restartSession(prompt)
   }
@@ -239,6 +278,19 @@ export default function ProjectPage() {
       await loadGitData()
     } catch (e) {
       toast('error', `Commit failed: ${e instanceof Error ? e.message : 'Unknown error'}`)
+    }
+  }
+
+  /** Fills the input rather than committing: the message is a draft to edit. */
+  async function handleGenerateCommitMessage() {
+    if (!id || generatingMessage) return
+    setGeneratingMessage(true)
+    try {
+      setCommitMessage(await generateCommitMessage(id))
+    } catch (e) {
+      toast('error', `Не получилось составить сообщение: ${e instanceof Error ? e.message : 'Unknown error'}`)
+    } finally {
+      setGeneratingMessage(false)
     }
   }
 
@@ -371,34 +423,6 @@ export default function ProjectPage() {
 
   useEffect(() => () => reviewAbortRef.current?.abort(), [])
 
-  /**
-   * The transcript only grows while Claude answers, so polling is the whole
-   * mechanism. A failed poll keeps the last known figure rather than blanking
-   * the badge — a restarting container should not look like an empty session.
-   */
-  useEffect(() => {
-    if (!id) return
-
-    let cancelled = false
-
-    const poll = async () => {
-      try {
-        const next = await getUsage(id)
-        if (!cancelled) setUsage(next)
-      } catch {
-        /* keep the previous reading */
-      }
-    }
-
-    poll()
-    const timer = setInterval(poll, USAGE_POLL_MS)
-
-    return () => {
-      cancelled = true
-      clearInterval(timer)
-    }
-  }, [id])
-
   async function handleShowCommit(line: string) {
     if (!id) return
     const hash = line.split(' ')[0]
@@ -442,14 +466,10 @@ export default function ProjectPage() {
   }
 
   const findings = parseFindings(review)
-
-  const usedPercent =
-    usage?.contextTokens != null
-      ? Math.min(100, Math.round((usage.contextTokens / usage.windowTokens) * 100))
-      : null
+  const agentLabel = sessionRunning ? runningAgentLabel : selectedAgent?.label ?? 'Claude'
 
   const tabs: { key: Tab; label: string }[] = [
-    { key: 'terminal', label: 'Claude' },
+    { key: 'terminal', label: agentLabel },
     { key: 'shell', label: 'Shell' },
     { key: 'diff', label: 'Diff' },
     { key: 'files', label: 'Files' },
@@ -465,50 +485,53 @@ export default function ProjectPage() {
           <Link to="/" className="btn btn-secondary btn-sm">← Back</Link>
           <h2>{project.name}</h2>
           {currentBranch && <span className="badge badge-git" title="Current branch">⎇ {currentBranch}</span>}
-          {usedPercent !== null && usage?.contextTokens != null && (
-            <span
-              className={`badge badge-usage ${usedPercent >= 90 ? 'usage-critical' : usedPercent >= 70 ? 'usage-warn' : ''}`}
-              title={
-                `Контекст: ${formatTokens(usage.contextTokens)} из ${formatTokens(usage.windowTokens)} токенов\n` +
-                `Осталось: ${formatTokens(usage.windowTokens - usage.contextTokens)} (${100 - usedPercent}%)` +
-                (usage.model ? `\nМодель: ${usage.model}` : '')
-              }
-            >
-              <span className="usage-bar">
-                <span className="usage-bar-fill" style={{ width: `${usedPercent}%` }} />
-              </span>
-              {100 - usedPercent}% ctx
-            </span>
-          )}
           <span className={sessionRunning ? 'badge badge-running' : 'badge badge-offline'}>
             <span className={`status-indicator ${sessionRunning ? 'running' : 'offline'}`} />
             {sessionRunning ? 'Running' : 'Offline'}
           </span>
           {sessionRunning && (
-            <button className="btn btn-danger btn-sm" onClick={handleStopSession}>
-              Stop Claude
-            </button>
+            <>
+              <span className="badge badge-agent" title="Агент этой сессии">{runningAgentLabel}</span>
+              <button className="btn btn-danger btn-sm" onClick={handleStopSession}>
+                Stop {runningAgentLabel}
+              </button>
+            </>
           )}
           {!sessionRunning && (
             <>
+              {agents.length > 1 && (
+                <select
+                  className="agent-select"
+                  value={agent}
+                  onChange={(e) => setAgent(e.target.value as AgentId)}
+                  disabled={starting}
+                  title="Каким агентом открыть проект"
+                >
+                  {agents.map((a) => (
+                    <option key={a.id} value={a.id}>{a.label}</option>
+                  ))}
+                </select>
+              )}
               <button className="btn btn-success btn-sm" onClick={() => handleStartSession()} disabled={starting}>
-                {starting ? 'Starting…' : 'Start Claude'}
+                {starting ? 'Starting…' : `Start ${agentLabel}`}
               </button>
               <button
                 className="btn btn-secondary btn-sm"
                 onClick={() => handleStartSession({ mode: 'continue' })}
                 disabled={starting}
-                title="claude --continue: продолжить последний диалог"
+                title="--continue: продолжить последний диалог"
               >
                 Resume
               </button>
-              <button
-                className="btn btn-secondary btn-sm"
-                onClick={() => setShowTaskModal(true)}
-                disabled={starting}
-              >
-                With task…
-              </button>
+              {supportsPrompt && (
+                <button
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => setShowTaskModal(true)}
+                  disabled={starting}
+                >
+                  With task…
+                </button>
+              )}
             </>
           )}
         </div>
@@ -549,11 +572,11 @@ export default function ProjectPage() {
                 className="btn btn-secondary btn-sm"
                 onClick={() => requestRestart()}
                 disabled={starting}
-                title="Перезапустить Claude с чистым контекстом"
+                title={`Перезапустить ${agentLabel} с чистым контекстом`}
               >
                 ✦ Новая задача
               </button>
-              <span className="tasks-hint">Закрывает диалог и открывает Claude заново</span>
+              <span className="tasks-hint">Закрывает диалог и открывает {agentLabel} заново</span>
             </div>
             <TerminalComponent sessionId={sessionId} />
           </div>
@@ -706,8 +729,17 @@ export default function ProjectPage() {
                   value={commitMessage}
                   onChange={(e) => setCommitMessage(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && handleCommit()}
+                  disabled={generatingMessage}
                 />
-                <button className="btn btn-primary btn-sm" onClick={handleCommit}>
+                <button
+                  className="btn btn-secondary btn-sm"
+                  onClick={handleGenerateCommitMessage}
+                  disabled={generatingMessage || !gitDiff}
+                  title={gitDiff ? 'Claude напишет сообщение по диффу' : 'Нет изменений'}
+                >
+                  {generatingMessage ? 'Пишет…' : '✦ Создать сообщение'}
+                </button>
+                <button className="btn btn-primary btn-sm" onClick={handleCommit} disabled={generatingMessage}>
                   Commit
                 </button>
               </div>
@@ -781,9 +813,9 @@ export default function ProjectPage() {
       )}
 
       {showTaskModal && (
-        <Modal title="Start Claude with a task" onClose={() => setShowTaskModal(false)}>
+        <Modal title={`Start ${agentLabel} with a task`} onClose={() => setShowTaskModal(false)}>
           <div className="form-field">
-            <label>Task for Claude</label>
+            <label>Task for {agentLabel}</label>
             <textarea
               className="task-textarea"
               value={taskPrompt}

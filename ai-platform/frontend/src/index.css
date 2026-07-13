@@ -221,6 +221,20 @@ button {
   border-color: var(--line-strong);
 }
 
+/* Tabular figures keep the seconds from nudging the layout every tick. */
+.navbar-clock {
+  margin-left: 8px;
+  padding: 7px 12px;
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 1px;
+  color: var(--brass);
+  border: 1px solid rgba(232, 176, 75, 0.35);
+  clip-path: var(--cut-sm);
+  text-shadow: var(--glow-brass);
+}
+
 .main-content {
   flex: 1;
   padding: 28px;
@@ -255,6 +269,54 @@ button {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
   gap: 18px;
+}
+
+/* Pinned projects get their own frame so the eye finds them before the list. */
+.project-group-favorites {
+  padding: 16px 18px 20px;
+  margin-bottom: 26px;
+  border: 1px solid rgba(232, 176, 75, 0.35);
+  background: rgba(232, 176, 75, 0.03);
+  clip-path: var(--cut);
+}
+
+.project-group-title {
+  font-family: var(--font-display);
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 4px;
+  text-transform: uppercase;
+  color: var(--brass);
+  margin-bottom: 16px;
+  text-shadow: var(--glow-brass);
+}
+
+.project-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.favorite-toggle {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 1.15rem;
+  line-height: 1;
+  padding: 2px;
+  color: var(--text-faint);
+  transition: color 0.15s, text-shadow 0.15s, transform 0.15s;
+}
+
+.favorite-toggle:hover {
+  color: var(--brass);
+  transform: scale(1.15);
+}
+
+.favorite-toggle.is-favorite {
+  color: var(--brass);
+  text-shadow: var(--glow-brass);
 }
 
 .project-card {
@@ -427,34 +489,11 @@ button {
   border-color: rgba(74, 88, 117, 0.5);
 }
 
-/* Context left in the Claude session; turns brass, then red, as it fills up. */
-.badge-usage {
-  background: rgba(125, 143, 171, 0.08);
-  color: var(--text-dim);
-  border-color: rgba(125, 143, 171, 0.4);
-}
-
-.badge-usage.usage-warn {
-  color: var(--brass);
-  border-color: rgba(232, 176, 75, 0.55);
-}
-
-.badge-usage.usage-critical {
-  color: var(--red);
-  border-color: rgba(255, 59, 92, 0.55);
-}
-
-.usage-bar {
-  width: 46px;
-  height: 5px;
-  background: rgba(125, 143, 171, 0.22);
-  overflow: hidden;
-}
-
-.usage-bar-fill {
-  height: 100%;
-  background: currentColor;
-  transition: width 0.4s ease;
+/* Which coding agent — Claude Code, opencode — runs in this session. */
+.badge-agent {
+  background: rgba(0, 240, 255, 0.07);
+  color: var(--cyan-dim);
+  border-color: rgba(0, 240, 255, 0.4);
 }
 
 .badge-waiting {
@@ -523,6 +562,20 @@ button {
   letter-spacing: 2px;
   color: #eaf7ff;
   text-shadow: 0 0 12px rgba(0, 240, 255, 0.18);
+}
+
+.agent-select {
+  padding: 6px 10px;
+  background: var(--bg-1);
+  border: 1px solid var(--line);
+  color: var(--text);
+  font-size: 0.8rem;
+  font-family: var(--font-ui);
+}
+
+.agent-select:focus {
+  outline: none;
+  border-color: var(--cyan);
 }
 
 .project-toolbar-right {

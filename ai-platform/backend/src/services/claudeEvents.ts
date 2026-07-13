@@ -1,6 +1,6 @@
 import { spawn, type ChildProcess } from 'child_process';
 import { EventEmitter } from 'node:events';
-import { UTF8_EXEC_ENV } from './dockerService';
+import { UTF8_EXEC_ENV, EXEC_USER_ARGS } from './dockerService';
 
 const CONTAINER_NAME = process.env.CLAUDE_CONTAINER || 'ai-claude';
 const LOG_PATH = '/tmp/claude-events.log';
@@ -49,6 +49,7 @@ class ClaudeEventStream extends EventEmitter {
       'docker',
       [
         'exec',
+        ...EXEC_USER_ARGS,
         ...UTF8_EXEC_ENV,
         CONTAINER_NAME,
         'tail',

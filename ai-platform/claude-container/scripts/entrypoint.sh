@@ -1,5 +1,14 @@
 #!/bin/bash
 
+# The container starts as root only long enough to fix up the named volumes, then
+# drops to `claude` for good. Docker creates a fresh volume owned by root:root, and
+# claude-auth / opencode-* all mount under /home/claude, so without this the agent
+# cannot write its own config. Everything below this block runs unprivileged.
+if [ "$(id -u)" = "0" ]; then
+  chown -R claude:claude /home/claude
+  exec gosu claude "$0" "$@"
+fi
+
 CONFIG_DIR="${CLAUDE_CONFIG_DIR:-/home/claude/.claude}"
 mkdir -p "$CONFIG_DIR"
 
@@ -17,8 +26,9 @@ if [ -s "$CONFIG_DIR/.credentials.json" ] && [ ! -e "$CONFIG_DIR/.claude.json" ]
   chmod 600 "$CONFIG_DIR/.claude.json"
 fi
 
-# Projects in /workspace are owned by the host user while git runs as root here;
-# without this every git command fails with "detected dubious ownership"
+# `claude` now shares the host user's uid, so ownership normally lines up. Projects
+# created before that (owned by root) or checked out by another host user would still
+# trip "detected dubious ownership", so keep trusting every path under /workspace.
 git config --global --add safe.directory '*'
 
 # Git escapes non-ASCII bytes in paths as octal ("\320\277\321\200...") unless told
