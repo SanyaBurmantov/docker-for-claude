@@ -1,0 +1,10 @@
+# Normalize all text files to LF inside the repo (git decides what's text).
+* text=auto
+
+# These are executed inside Linux containers. Force LF on checkout on EVERY OS,
+# including Windows with core.autocrlf=true — CRLF would break the script
+# shebangs (#!/bin/bash^M) and put trailing \r on supervisord command= values.
+*.sh          text eol=lf
+*.conf        text eol=lf
+Dockerfile    text eol=lf
+.env.example  text eol=lf
