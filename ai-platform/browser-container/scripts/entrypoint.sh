@@ -1,57 +1,18 @@
 #!/bin/bash
+set -e
 
 # No manual Firefox proxy config: the gateway (redsocks + iptables) transparently
 # routes all traffic through the authenticated proxy, so Firefox works out of the box.
 
-echo "Starting Xvfb..."
-Xvfb :0 -screen 0 1920x1080x24 &
-sleep 1
-
+# The browser-profile (.mozilla) and browser-config (.config) named volumes are
+# created root-owned on first run. XFCE and Firefox run as user claude and can't
+# write into root-owned dirs, so fix ownership before anything starts.
 echo "Fixing home directory ownership..."
 chown -R claude:claude /home/claude
 
-echo "Starting desktop environment as user claude..."
-su - claude -c "
-unset SESSION_MANAGER
-unset DBUS_SESSION_BUS_ADDRESS
-export DISPLAY=:0
-startxfce4
-" &
-sleep 4
+mkdir -p /var/log/supervisor
 
-echo "Starting x11vnc..."
-x11vnc -display :0 -forever -shared -rfbport 5900 -passwd "${VNC_PASSWORD:-claude}" -noxdamage &
-sleep 1
-
-echo "Starting noVNC..."
-/opt/novnc/utils/novnc_proxy --vnc localhost:5900 --listen 6080 &
-sleep 1
-
-cat > /opt/novnc/index.html << 'REDIRECT'
-<!DOCTYPE html>
-<html lang="en">
-<head><meta charset="utf-8"><meta http-equiv="refresh" content="0;url=vnc.html"></head>
-<body><a href="vnc.html">Open noVNC</a></body>
-</html>
-REDIRECT
-
-echo "Creating Firefox desktop shortcut..."
-mkdir -p /home/claude/Desktop
-cat > /home/claude/Desktop/firefox.desktop << EOF
-[Desktop Entry]
-Name=Firefox
-Comment=Web Browser
-Exec=firefox --no-sandbox
-Icon=firefox
-Terminal=false
-Type=Application
-Categories=Network;WebBrowser;
-EOF
-chmod +x /home/claude/Desktop/firefox.desktop
-chown -R claude:claude /home/claude/Desktop
-
-echo "Switching to claude user for interactive use..."
-echo "Browser container ready ??? VNC on 5900, noVNC on 6080"
-
-# Keep container alive and switch to claude user for any interactive commands
-tail -f /dev/null
+# supervisord (PID 1) starts Xvfb, XFCE, x11vnc and noVNC and keeps them alive.
+# See supervisord.conf for start ordering and the wait-for-display guards.
+echo "Starting services under supervisor — VNC on 5900, noVNC on 6080..."
+exec /usr/bin/supervisord -c /etc/supervisor/supervisord.conf
