@@ -7,10 +7,15 @@ echo "Starting Xvfb..."
 Xvfb :0 -screen 0 1920x1080x24 &
 sleep 1
 
+echo "Fixing home directory ownership..."
+chown -R claude:claude /home/claude
+
 echo "Starting desktop environment as user claude..."
 su - claude -c "
+unset SESSION_MANAGER
+unset DBUS_SESSION_BUS_ADDRESS
 export DISPLAY=:0
-dbus-launch --exit-with-session startxfce4 &
+startxfce4
 " &
 sleep 4
 
@@ -46,7 +51,7 @@ chmod +x /home/claude/Desktop/firefox.desktop
 chown -R claude:claude /home/claude/Desktop
 
 echo "Switching to claude user for interactive use..."
-echo "Browser container ready — VNC on 5900, noVNC on 6080"
+echo "Browser container ready ??? VNC on 5900, noVNC on 6080"
 
 # Keep container alive and switch to claude user for any interactive commands
 tail -f /dev/null
