@@ -388,6 +388,172 @@ export async function streamReview(
   await consumeTextStream(res, onText)
 }
 
+// ============ Loop-manager ============
+
+export type LoopPhase =
+  | 'idle'
+  | 'analyzing'
+  | 'awaiting_approval'
+  | 'implementing'
+  | 'verifying'
+  | 'aggregating'
+  | 'done'
+  | 'failed'
+  | 'stopped'
+
+export type LoopTier = 'trivial' | 'medium' | 'hard'
+export type LoopEngineId = 'claude' | 'opencode' | 'gemini'
+export type LoopRole = 'manager' | 'analyst' | 'executor' | 'tester' | 'reviewer'
+
+export interface LoopExecutorRef {
+  engine: LoopEngineId
+  model: string
+}
+
+export interface LoopReviewNote {
+  severity: 'BUG' | 'RISK' | 'NIT'
+  file: string
+  line: number
+  msg: string
+}
+
+export interface LoopTestResult {
+  command: string
+  passed: boolean
+  failed: string[]
+  logPath: string
+}
+
+export interface LoopIteration {
+  n: number
+  role: LoopRole
+  phase: LoopPhase
+  engine?: LoopExecutorRef
+  summary: string
+  artifactPath?: string
+  tokens?: { in: number; out: number; cacheRead: number }
+  ts: string
+}
+
+export interface LoopDecision {
+  action: 'analyze' | 'implement' | 'test' | 'review' | 'done' | 'ask_human'
+  task: string
+  scope: string
+  non_goals: string
+  constraints: string
+  complexity: LoopTier
+  executor: LoopExecutorRef
+  rationale: string
+  done_criteria: string
+  open_questions: string[]
+}
+
+export interface LoopGatePayload {
+  task: string
+  complexity: LoopTier
+  executor: LoopExecutorRef
+  planPath: string
+  openQuestions?: string[]
+}
+
+export interface LoopState {
+  project: string
+  goal: string
+  taskSourceLine?: number
+  status: LoopPhase
+  tier: LoopTier
+  executor: LoopExecutorRef
+  sessionId: string | null
+  planPath: string
+  findingsSummary: string
+  reviewNotes: LoopReviewNote[]
+  testResults: LoopTestResult[]
+  humanNotes: string[]
+  currentDiffSha: string | null
+  verifiedDiffSha: string | null
+  checkpointSha: string | null
+  pendingDecision: LoopDecision | null
+  activeDecision: LoopDecision | null
+  fixRounds: number
+  consecutiveFailsAtTier: number
+  lastFailureNote: string | null
+  budget: { maxIterations: number; maxFixRounds: number; deadlineMs: number }
+  budgetResumedAt?: string
+  iterations: LoopIteration[]
+  createdAt: string
+  updatedAt: string
+}
+
+export type LoopStreamEvent =
+  | { type: 'turn'; it: LoopIteration }
+  | { type: 'text'; text: string }
+  | { type: 'gate'; gate: LoopGatePayload }
+  | { type: 'phase'; status: LoopPhase }
+  | { type: 'note'; note: string }
+  | { type: 'done' }
+  | { type: 'error'; error: string }
+
+export function startLoop(id: string, goal: string, taskSourceLine?: number): Promise<LoopState> {
+  return request<LoopState>(`/api/projects/${id}/loop`, {
+    method: 'POST',
+    body: JSON.stringify({ goal, taskSourceLine }),
+  })
+}
+
+/** Null when the project has no loop yet (including one that never started), same convention as fetchChecklistFile. */
+export async function fetchLoop(id: string): Promise<LoopState | null> {
+  const res = await fetch(`/api/projects/${id}/loop`)
+  if (res.status === 404) return null
+  if (!res.ok) {
+    const text = await res.text().catch(() => res.statusText)
+    throw new Error(`HTTP ${res.status}: ${text}`)
+  }
+  return res.json()
+}
+
+export function postLoopMessage(id: string, note: string): Promise<void> {
+  return request<void>(`/api/projects/${id}/loop/message`, {
+    method: 'POST',
+    body: JSON.stringify({ note }),
+  })
+}
+
+export interface LoopGateDecision {
+  approve: boolean
+  edit?: Partial<Pick<LoopDecision, 'task' | 'scope' | 'non_goals' | 'constraints' | 'complexity'>> & {
+    executor?: LoopExecutorRef
+  }
+  note?: string
+}
+
+export function resolveLoopGate(id: string, decision: LoopGateDecision): Promise<void> {
+  return request<void>(`/api/projects/${id}/loop/gate`, {
+    method: 'POST',
+    body: JSON.stringify(decision),
+  })
+}
+
+export function stopLoopRun(id: string): Promise<void> {
+  return request<void>(`/api/projects/${id}/loop/stop`, { method: 'POST' })
+}
+
+/**
+ * The loop's feed is a GET SSE stream (no request body needed), so plain
+ * EventSource does the job — unlike the POST-based explain/review/commit
+ * streams, which need `consumeTextStream`'s fetch+reader parsing instead.
+ */
+export function streamLoop(id: string, onEvent: (e: LoopStreamEvent) => void): () => void {
+  const es = new EventSource(`/api/projects/${id}/loop/stream`)
+  es.onmessage = (msg) => {
+    try {
+      onEvent(JSON.parse(msg.data) as LoopStreamEvent)
+    } catch {
+      // an unparsable frame is not worth dropping the connection over
+    }
+  }
+  return () => es.close()
+}
+
 export async function uploadFiles(id: string, dir: string, files: File[]): Promise<void> {
   const fd = new FormData()
   files.forEach((f) => fd.append('files', f))

@@ -23,9 +23,11 @@ interface ChecklistPanelProps {
   file: string
   copy: ChecklistCopy
   onDiscuss: (text: string) => void
+  /** Present only on the tasks tab — sends a `- [ ]` line to the loop-manager instead of the terminal. */
+  onSendToLoop?: (task: Task) => void
 }
 
-export default function ChecklistPanel({ projectId, file, copy, onDiscuss }: ChecklistPanelProps) {
+export default function ChecklistPanel({ projectId, file, copy, onDiscuss, onSendToLoop }: ChecklistPanelProps) {
   const toast = useToast()
   const [lines, setLines] = useState<string[] | null>(null)
   const [error, setError] = useState('')
@@ -35,7 +37,10 @@ export default function ChecklistPanel({ projectId, file, copy, onDiscuss }: Che
   const load = useCallback(async () => {
     try {
       const content = await fetchChecklistFile(projectId, file)
-      setLines(content === null ? [] : content.split('\n'))
+      // CRLF line endings (common on a Windows checkout) leave a trailing \r on
+      // every line after this split; TASK_RE's `$` can't match past it, so a
+      // CRLF task silently disappears from the list. Normalize once, here.
+      setLines(content === null ? [] : content.replace(/\r\n/g, '\n').split('\n'))
       setError('')
     } catch (e) {
       setError(e instanceof Error ? e.message : copy.loadError)
@@ -103,6 +108,15 @@ export default function ChecklistPanel({ projectId, file, copy, onDiscuss }: Che
 
       <span className="task-text">{task.text}</span>
 
+      {onSendToLoop && !task.done && (
+        <button
+          className="btn btn-secondary btn-sm"
+          onClick={() => onSendToLoop(task)}
+          title="Передать в loop-менеджер"
+        >
+          ▶ Loop
+        </button>
+      )}
       <button className="btn btn-secondary btn-sm" onClick={() => onDiscuss(task.text)} title={copy.discussTitle}>
         Обсудить
       </button>
