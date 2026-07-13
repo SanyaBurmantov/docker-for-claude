@@ -131,14 +131,20 @@ interface LoopState {
 {
   "action": "analyze | implement | test | review | done | ask_human",
   "task": "конкретная формулировка для исполнителя роли",
+  "scope": "что именно в границах этого шага",
+  "non_goals": "что НЕ трогать на этом шаге",
+  "constraints": "инварианты/ограничения, которые нельзя нарушить",
   "complexity": "trivial | medium | hard",
   "executor": { "engine": "claude", "model": "haiku" },
   "rationale": "почему эта сложность и этот исполнитель",
-  "done_criteria": "как поймём, что шаг закрыт"
+  "done_criteria": "проверяемый критерий закрытия шага",
+  "open_questions": ["неоднозначности; пусто ⇒ все закрыты допущениями в task"]
 }
 ```
 
-Валидация: `action` из энума; `executor.engine`+`model` из таблицы маршрутизации; text-only движок не может получить `implement`/`analyze`/`review`. Policy-правило в system-prompt менеджера: **нельзя `done`, пока `verifiedDiffSha !== currentDiffSha`** (изменение не прошло test+review после последнего implement).
+**Дотошность постановки** (главное требование к менеджеру): `task`+`scope`+`non_goals`+`constraints`+`done_criteria` вместе образуют ТЗ, не оставляющее исполнителю догадок. Это свойство *формулировки*, не глубины размышления — достигается директивой в frozen system-prompt + этой схемой, тир менеджера ради него поднимать не нужно. Непустой `open_questions` на шаге `implement` ⇒ менеджер обязан выбрать `ask_human`, а не гадать.
+
+Валидация: `action` из энума; `executor.engine`+`model` из таблицы маршрутизации; text-only движок не может получить `implement`/`analyze`/`review`; `task`/`scope`/`done_criteria` непусты. Policy-правило в system-prompt менеджера: **нельзя `done`, пока `verifiedDiffSha !== currentDiffSha`** (изменение не прошло test+review после последнего implement).
 
 ---
 
