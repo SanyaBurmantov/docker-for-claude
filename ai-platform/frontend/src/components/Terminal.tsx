@@ -8,9 +8,12 @@ import 'xterm/css/xterm.css'
 
 interface TerminalProps {
   sessionId: string | null
+  /** The parent keeps this mounted across tab switches and hides it with CSS; `fit()` needs
+   *  a re-run once it's visible again since it can't measure a `display:none` container. */
+  visible?: boolean
 }
 
-export default function Terminal({ sessionId }: TerminalProps) {
+export default function Terminal({ sessionId, visible = true }: TerminalProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const xtermRef = useRef<XTerm | null>(null)
   const fitAddonRef = useRef<FitAddon | null>(null)
@@ -124,6 +127,13 @@ export default function Terminal({ sessionId }: TerminalProps) {
   useEffect(() => {
     fitAddonRef.current?.fit()
   }, [sessionId])
+
+  useEffect(() => {
+    if (!visible) return
+    fitAddonRef.current?.fit()
+    const term = xtermRef.current
+    if (term) sendResizeRef.current(term.cols, term.rows)
+  }, [visible])
 
   useEffect(() => {
     const term = xtermRef.current

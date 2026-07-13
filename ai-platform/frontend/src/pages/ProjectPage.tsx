@@ -567,20 +567,27 @@ export default function ProjectPage() {
       </div>
 
       <div className="tab-content">
-        {activeTab === 'terminal' && (
-          <div>
-            <div className="diff-controls">
-              <button
-                className="btn btn-secondary btn-sm"
-                onClick={() => requestRestart()}
-                disabled={starting}
-                title={`Перезапустить ${agentLabel} с чистым контекстом`}
-              >
-                ✦ Новая задача
-              </button>
-              <span className="tasks-hint">Закрывает диалог и открывает {agentLabel} заново</span>
-            </div>
-            <TerminalComponent sessionId={sessionId} />
+        {/* Terminal/Shell stay mounted across tab switches — unmounting would throw away xterm's
+            scrollback and reconnect to a fresh pty attach, which only redraws the current tmux
+            screen, not its history. CSS hides them instead; `visible` tells xterm to refit. */}
+        <div style={{ display: activeTab === 'terminal' ? undefined : 'none' }}>
+          <div className="diff-controls">
+            <button
+              className="btn btn-secondary btn-sm"
+              onClick={() => requestRestart()}
+              disabled={starting}
+              title={`Перезапустить ${agentLabel} с чистым контекстом`}
+            >
+              ✦ Новая задача
+            </button>
+            <span className="tasks-hint">Закрывает диалог и открывает {agentLabel} заново</span>
+          </div>
+          <TerminalComponent sessionId={sessionId} visible={activeTab === 'terminal'} />
+        </div>
+
+        {id && (
+          <div style={{ display: activeTab === 'shell' ? undefined : 'none' }}>
+            <TerminalComponent sessionId={`shell-${id}`} visible={activeTab === 'shell'} />
           </div>
         )}
 
@@ -605,12 +612,6 @@ export default function ProjectPage() {
               requestRestart(`Давай обсудим замечание код-ревью, пока ничего не меняя в коде: ${text}`)
             }
           />
-        )}
-
-        {activeTab === 'shell' && id && (
-          <div>
-            <TerminalComponent sessionId={`shell-${id}`} />
-          </div>
         )}
 
         {activeTab === 'diff' && (
