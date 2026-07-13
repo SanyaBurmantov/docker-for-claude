@@ -1,9 +1,9 @@
 import { Router } from 'express';
-import { fetch, ProxyAgent, Dispatcher } from 'undici';
+import { fetch } from 'undici';
+import { GEMINI_API_BASE, geminiApiKey, geminiProxyDispatcher } from '../services/geminiClient';
 
 const router = Router();
 
-const API_BASE = 'https://generativelanguage.googleapis.com/v1beta';
 const DEFAULT_MODEL = process.env.GEMINI_MODEL || 'gemini-3.1-flash-lite';
 
 // Allowed models — keeps a compromised frontend from pointing the key at
@@ -20,30 +20,6 @@ const MODELS = [
   'gemini-3-pro-preview',
 ];
 
-function apiKey(): string {
-  return process.env.GEMINI_API_KEY || '';
-}
-
-// undefined = not resolved yet, null = resolved to "no proxy"
-let cachedDispatcher: Dispatcher | null | undefined;
-
-function proxyDispatcher(): Dispatcher | undefined {
-  if (cachedDispatcher !== undefined) return cachedDispatcher ?? undefined;
-
-  const { PROXY_HOST, PROXY_PORT, PROXY_USER, PROXY_PASS } = process.env;
-  if (!PROXY_HOST || !PROXY_PORT) {
-    cachedDispatcher = null;
-    return undefined;
-  }
-
-  const opts: ProxyAgent.Options = { uri: `http://${PROXY_HOST}:${PROXY_PORT}` };
-  if (PROXY_USER && PROXY_PASS) {
-    opts.token = `Basic ${Buffer.from(`${PROXY_USER}:${PROXY_PASS}`).toString('base64')}`;
-  }
-  cachedDispatcher = new ProxyAgent(opts);
-  return cachedDispatcher;
-}
-
 interface ChatMessage {
   role: 'user' | 'model';
   text: string;
@@ -51,15 +27,15 @@ interface ChatMessage {
 
 router.get('/status', (_req, res) => {
   res.json({
-    configured: Boolean(apiKey()),
+    configured: Boolean(geminiApiKey()),
     model: DEFAULT_MODEL,
     models: MODELS,
-    viaProxy: Boolean(proxyDispatcher()),
+    viaProxy: Boolean(geminiProxyDispatcher()),
   });
 });
 
 router.post('/chat', async (req, res) => {
-  const key = apiKey();
+  const key = geminiApiKey();
   if (!key) {
     res.status(503).json({ error: 'GEMINI_API_KEY is not set' });
     return;
@@ -82,13 +58,13 @@ router.post('/chat', async (req, res) => {
 
   let upstream;
   try {
-    upstream = await fetch(`${API_BASE}/models/${chosen}:streamGenerateContent?alt=sse`, {
+    upstream = await fetch(`${GEMINI_API_BASE}/models/${chosen}:streamGenerateContent?alt=sse`, {
       method: 'POST',
       // This credential authenticates only as x-goog-api-key; Gemini rejects it
       // as an OAuth bearer token.
       headers: { 'content-type': 'application/json', 'x-goog-api-key': key },
       body: JSON.stringify({ contents }),
-      dispatcher: proxyDispatcher(),
+      dispatcher: geminiProxyDispatcher(),
       signal: abort.signal,
     });
   } catch (err) {
