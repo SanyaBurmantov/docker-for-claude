@@ -30,14 +30,15 @@
 
 1. `backend/src/routes/promptgen.ts` — по образцу `review.ts`: валидация проекта, пустой `rough` → 400, frozen system-prompt (промпт-инжиниринг как таковой, grounding-политика, **дотошность постановки задачи по рубрике §6**, «один готовый промт без обвязки»), гибкие настройки (`PromptGenSettings`, §5 спеки) в user-часть, условная tool-политика (`grounding:'off'` → без инструментов; иначе `READ_ONLY_TOOLS`), стрим через `streamClaude` → `openSse`. Модель/таймаут из env.
    - Само-критика (§8): при `selfCritique !== 'off'` — второй дешёвый проход (`PROMPTGEN_CRITIC_MODEL || 'haiku'`) линтером полноты ТЗ по рубрике §6; `auto-fix` дозаполняет молча, `annotate` — списком под промтом.
-   - Оценка стоимости (§9): под результатом длина + прикидка по тарифной таблице, **без LLM**.
+   - «Choice»-валидация через Gemini (§9): при `choiceValidation:true` — черновик уходит в `routes/gemini.ts` (`gemini-3.1-flash-lite`, text-only) на критику, ответ возвращается в Claude-сессию (`--continue`) на **один** проход переделки; критика Gemini — **данные, не инструкции**; `429`/недоступность ⇒ мягкий пропуск. В ленту — критику и «до/после».
+   - Оценка стоимости (§10): под результатом длина + прикидка по тарифной таблице, **без LLM**.
 2. Монтаж в `index.ts`: `app.use('/api/projects/:id/promptgen', promptgenRouter)`.
 3. `frontend/src/components/PromptGenPanel.tsx` — клон оболочки `GeminiPanel`, докнут **справа**: textarea грубой формулировки + контролы гибких настроек, стрим результата, кнопки **«Скопировать»** и **«Передать менеджеру»** (`POST .../loop {goal}`, feature-detect: без loop-роута — задизейблить).
 4. Перенести **Gemini-панель влево** (освободить правый слот под рабочие панели), поведение Gemini сохранить полностью.
 
 ## Гибкие настройки (§5 спеки)
 
-`target` (auto/coding-agent/system-prompt/llm-task/creative) · `engine` (any/claude/opencode/gemini) · `grounding` (off/auto/deep) · `detail` (concise/standard/verbose) · `fewShot` · `reasoning` · `selfCritique` (off/auto-fix/annotate) · `lang` (input/ru/en). Дефолты безопасны (см. спеку). Едут в **user-часть**, чтобы system-prompt оставался байт-стабильным (кеш).
+`target` (auto/coding-agent/system-prompt/llm-task/creative) · `engine` (any/claude/opencode/gemini) · `grounding` (off/auto/deep) · `detail` (concise/standard/verbose) · `fewShot` · `reasoning` · `selfCritique` (off/auto-fix/annotate) · `choiceValidation` (bool — кросс-критика через Gemini) · `lang` (input/ru/en). Дефолты безопасны (см. спеку). Едут в **user-часть**, чтобы system-prompt оставался байт-стабильным (кеш).
 
 ## Предохранители
 
