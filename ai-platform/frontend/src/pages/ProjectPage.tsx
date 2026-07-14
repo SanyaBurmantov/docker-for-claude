@@ -15,6 +15,7 @@ import DiffViewer from '../components/DiffViewer'
 import FileExplorer from '../components/FileExplorer'
 import ChecklistPanel, { TASKS_COPY, FIXES_COPY } from '../components/ChecklistPanel'
 import ManagerPanel from '../components/ManagerPanel'
+import PromptGenPanel from '../components/PromptGenPanel'
 import Modal, { ConfirmDialog } from '../components/Modal'
 import { useToast } from '../components/Toast'
 
@@ -795,6 +796,8 @@ export default function ProjectPage() {
           onStartRequestHandled={() => setLoopStartRequest(null)}
         />
       )}
+
+      {id && <PromptGenPanel projectId={id} />}
 
       {pendingRestart && (
         <ConfirmDialog

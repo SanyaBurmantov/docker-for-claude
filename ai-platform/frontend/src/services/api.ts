@@ -554,6 +554,123 @@ export function streamLoop(id: string, onEvent: (e: LoopStreamEvent) => void): (
   return () => es.close()
 }
 
+// ============ PromptGen ============
+
+export interface PromptGenSettings {
+  target: 'auto' | 'coding-agent' | 'system-prompt' | 'llm-task' | 'creative'
+  engine: 'any' | 'claude' | 'opencode' | 'gemini'
+  grounding: 'off' | 'auto' | 'deep'
+  detail: 'concise' | 'standard' | 'verbose'
+  fewShot: boolean
+  reasoning: boolean
+  selfCritique: 'off' | 'auto-fix' | 'annotate'
+  choiceValidation: boolean
+  lang: 'input' | 'ru' | 'en'
+}
+
+export const DEFAULT_PROMPTGEN_SETTINGS: PromptGenSettings = {
+  target: 'auto',
+  engine: 'any',
+  grounding: 'auto',
+  detail: 'standard',
+  fewShot: false,
+  reasoning: false,
+  selfCritique: 'auto-fix',
+  choiceValidation: false,
+  lang: 'input',
+}
+
+export interface PromptGenCost {
+  chars: number
+  tokensApprox: number
+  model: string
+  priceInPerMTok: number
+  estimateInUsd: number
+}
+
+export interface PromptGenHandlers {
+  /** A chunk of the currently-final prompt text. */
+  onText: (chunk: string) => void
+  /** A side note (self-critique gaps, Gemini critique, availability warnings). */
+  onNote: (note: string) => void
+  /** The text accumulated so far is stale and about to be replaced (Gemini redo). */
+  onReset: () => void
+  onCost: (cost: PromptGenCost) => void
+}
+
+/** Streams a generated prompt from the rough idea in `rough`; frames carry a `type` discriminator, unlike the plain {text} streams. */
+export async function streamPromptGen(
+  projectId: string,
+  rough: string,
+  settings: PromptGenSettings,
+  handlers: PromptGenHandlers,
+  signal?: AbortSignal
+): Promise<void> {
+  const res = await fetch(`/api/projects/${projectId}/promptgen`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ rough, settings }),
+    signal,
+  })
+
+  if (!res.ok || !res.body) {
+    const raw = await res.text().catch(() => res.statusText)
+    let message = raw
+    try {
+      message = JSON.parse(raw).error ?? raw
+    } catch {
+      // non-JSON error body — show it as-is
+    }
+    throw new Error(message || `HTTP ${res.status}`)
+  }
+
+  const reader = res.body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+
+  for (;;) {
+    const { done, value } = await reader.read()
+    if (done) break
+
+    buffer += decoder.decode(value, { stream: true })
+    const lines = buffer.split('\n')
+    buffer = lines.pop() ?? ''
+
+    for (const line of lines) {
+      if (!line.startsWith('data:')) continue
+      const payload = line.slice(5).trim()
+      if (!payload) continue
+
+      const event = JSON.parse(payload) as
+        | { type: 'text'; text: string }
+        | { type: 'note'; note: string }
+        | { type: 'reset' }
+        | { type: 'cost' } & PromptGenCost
+        | { type: 'error'; error: string }
+        | { type: 'done' }
+
+      switch (event.type) {
+        case 'text':
+          handlers.onText(event.text)
+          break
+        case 'note':
+          handlers.onNote(event.note)
+          break
+        case 'reset':
+          handlers.onReset()
+          break
+        case 'cost':
+          handlers.onCost(event)
+          break
+        case 'error':
+          throw new Error(event.error)
+        case 'done':
+          break
+      }
+    }
+  }
+}
+
 export async function uploadFiles(id: string, dir: string, files: File[]): Promise<void> {
   const fd = new FormData()
   files.forEach((f) => fd.append('files', f))
