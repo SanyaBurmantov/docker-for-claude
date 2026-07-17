@@ -686,6 +686,25 @@ export default function ProjectPage() {
 
             <div>
               <div className="review-header">
+                <h3 className="section-title">Трудозатраты за день</h3>
+                <button className="btn btn-secondary btn-sm" onClick={handleDayLog} disabled={dayLogLoading}>
+                  {dayLogLoading ? 'Собираю…' : 'Показать'}
+                </button>
+              </div>
+              {dayLogError ? (
+                <div className="git-output review-error">{dayLogError}</div>
+              ) : dayLog ? (
+                <div className="git-output" style={{ whiteSpace: 'pre-wrap' }}>
+                  {dayLog}
+                  {dayLogLoading && <span className="gemini-caret" />}
+                </div>
+              ) : dayLogLoading ? (
+                <div className="git-output review-waiting">Читаю коммиты за сегодня…</div>
+              ) : null}
+            </div>
+
+            <div>
+              <div className="review-header">
                 <h3 className="section-title">Review</h3>
                 {!reviewing && findings.length > 0 && (
                   <button
@@ -780,25 +799,6 @@ export default function ProjectPage() {
                   Rollback
                 </button>
               </div>
-            </div>
-
-            <div>
-              <div className="review-header">
-                <h3 className="section-title">Трудозатраты за день</h3>
-                <button className="btn btn-secondary btn-sm" onClick={handleDayLog} disabled={dayLogLoading}>
-                  {dayLogLoading ? 'Собираю…' : 'Показать'}
-                </button>
-              </div>
-              {dayLogError ? (
-                <div className="git-output review-error">{dayLogError}</div>
-              ) : dayLog ? (
-                <div className="git-output" style={{ whiteSpace: 'pre-wrap' }}>
-                  {dayLog}
-                  {dayLogLoading && <span className="gemini-caret" />}
-                </div>
-              ) : dayLogLoading ? (
-                <div className="git-output review-waiting">Читаю коммиты за сегодня…</div>
-              ) : null}
             </div>
 
             <div>
