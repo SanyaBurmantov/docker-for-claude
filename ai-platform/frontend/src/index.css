@@ -221,6 +221,13 @@ button {
   border-color: var(--line-strong);
 }
 
+/* A <button> styled as a nav link (the day-log report) needs its native chrome stripped. */
+button.nav-link {
+  background: none;
+  cursor: pointer;
+  font-family: inherit;
+}
+
 /* Tabular figures keep the seconds from nudging the layout every tick. */
 .navbar-clock {
   margin-left: 8px;

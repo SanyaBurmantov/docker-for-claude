@@ -43,6 +43,8 @@ services:
       - HTTP_PROXY=http://${PROXY_USER}:${PROXY_PASS}@${PROXY_HOST}:${PROXY_PORT}
       - HTTPS_PROXY=http://${PROXY_USER}:${PROXY_PASS}@${PROXY_HOST}:${PROXY_PORT}
       - NO_PROXY=localhost,127.0.0.1
+      - DASHSCOPE_API_KEY=${DASHSCOPE_API_KEY}
+      - DASHSCOPE_MODEL=${DASHSCOPE_MODEL:-qwen-max}
     volumes:
       - ${PROJECTS_DIR}:/workspace
       - claude-auth:/home/claude/.claude

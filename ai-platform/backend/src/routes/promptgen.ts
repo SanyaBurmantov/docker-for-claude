@@ -1,7 +1,9 @@
+import { spawn } from 'child_process';
 import { Router, type Request, type Response } from 'express';
-import { isValidProjectName } from '../services/projectService';
+import { isValidProjectName, writeProjectFile } from '../services/projectService';
 import { streamClaude, READ_ONLY_TOOLS, NO_TOOLS, type ClaudeQuery } from '../services/claudeQuery';
 import { streamGemini } from '../services/geminiQuery';
+import { EXEC_USER_ARGS, UTF8_EXEC_ENV } from '../services/dockerService';
 import { openSse } from '../services/sse';
 
 const router = Router({ mergeParams: true });
@@ -13,6 +15,34 @@ const TIMEOUT_MS = Number(process.env.PROMPTGEN_TIMEOUT_MS || 240_000);
 const CRITIC_MODEL = process.env.PROMPTGEN_CRITIC_MODEL || 'haiku';
 const CRITIC_TIMEOUT_MS = 60_000;
 const MAX_ROUGH_CHARS = 20_000;
+
+const CONTAINER_NAME = process.env.CLAUDE_CONTAINER || 'ai-claude';
+
+// ============ Token exhaustion fallback (shared with loopService) ============
+
+const CLAUDE_TOKEN_EXHAUSTION = [
+  'billing_error', 'rate_limit_error',
+  'rate_limit_exceeded', 'too many requests', 'retry after',
+  'billing_limit_exceeded', 'credit_limit_exceeded', 'insufficient_quota',
+  'credit balance', 'spend limit', 'spend cap', 'monthly spend',
+  'account has run out', 'run out of credits', 'credit balance is too low',
+  'weekly rate limit', 'weekly limit', 'message limit',
+  'tokens will be', 'replenish', 'replenished', 'reset',
+  'exhausted', 'try again later', 'please try again',
+  'billing', '429', '402', '529',
+];
+
+function isClaudeTokenExhaustion(msg: string): boolean {
+  const lower = msg.toLowerCase();
+  return CLAUDE_TOKEN_EXHAUSTION.some((p) => lower.includes(p));
+}
+
+const PARTIAL_LOG_BASE = '.loop/promptgen-partial';
+const FALLBACK_MODEL = process.env.PROMPTGEN_FALLBACK_MODEL || 'opencode/hy3-free';
+
+function partialLogPath(project: string, stage: string): string {
+  return `${PARTIAL_LOG_BASE}-${stage}.md`;
+}
 
 // ============ Settings ============
 
@@ -176,20 +206,20 @@ function buildRedoPrompt(draft: string, geminiCritique: string): string {
 
 // ============ Cost estimate (deterministic, no LLM) ============
 
-// $ per 1M tokens, in/out — from docs/loop-manager-spec.md §2. deepseek has no
-// fixed number there ("низкий"); the value below is a rough stand-in.
+// $ per 1M tokens, in/out — from docs/loop-manager-spec.md §2. hy3-free (opencode
+// provider) has no published number there; the value below is a rough stand-in.
 const PRICE_PER_MTOK: Record<string, { in: number; out: number }> = {
   haiku: { in: 1, out: 5 },
   sonnet: { in: 3, out: 15 },
   opus: { in: 5, out: 25 },
   fable: { in: 10, out: 50 },
   'gemini-3.1-flash-lite': { in: 0, out: 0 },
-  deepseek: { in: 0.14, out: 0.28 },
+  'hy3-free': { in: 0.14, out: 0.28 },
 };
 
 export function representativeModel(engine: Engine): string {
   if (engine === 'gemini') return 'gemini-3.1-flash-lite';
-  if (engine === 'opencode') return 'deepseek';
+  if (engine === 'opencode') return 'hy3-free';
   // 'claude' and 'any' both settle on whichever Claude model this route runs.
   return MODEL in PRICE_PER_MTOK ? MODEL : 'sonnet';
 }
@@ -218,10 +248,88 @@ function runClaudeStage(
         text += chunk;
         forward?.(chunk);
       },
-      onError: (message) => reject(new Error(message)),
+      onError: (message) => {
+        const err = new Error(message) as Error & { partialText: string };
+        err.partialText = text;
+        reject(err);
+      },
       onDone: () => resolve(text),
     });
     onCancel(cancel);
+  });
+}
+
+/**
+ * Runs opencode (with tools) as a fallback when Claude runs out of tokens in a
+ * grounding-required stage. The system prompt is prepended to the user prompt because
+ * opencode has no `--append-system-prompt` flag.
+ */
+function runOpencodeStage(
+  projectName: string,
+  prompt: string,
+  systemPrompt: string,
+  model: string,
+  timeoutMs: number,
+  onCancel: (cancel: () => void) => void,
+  forward?: (chunk: string) => void
+): Promise<string> {
+  const fullPrompt = systemPrompt ? `${systemPrompt}\n\n${prompt}` : prompt;
+
+  return new Promise((resolve, reject) => {
+    const child = spawn('docker', [
+      'exec', ...EXEC_USER_ARGS, ...UTF8_EXEC_ENV,
+      '-w', `/workspace/${projectName}`,
+      CONTAINER_NAME,
+      'opencode', 'run', fullPrompt, '--format', 'json', '-m', model, '--auto',
+    ]);
+
+    let settled = false;
+    const settle = (fn: () => void) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      fn();
+    };
+    const timer = setTimeout(() => {
+      child.kill('SIGKILL');
+      settle(() => reject(new Error(`opencode not answered within ${Math.round(timeoutMs / 1000)}s`)));
+    }, timeoutMs);
+
+    onCancel(() => {
+      child.kill('SIGKILL');
+      settled = true;
+      clearTimeout(timer);
+    });
+
+    let text = '';
+    const decoder = new TextDecoder();
+    child.stdout.on('data', (chunk: Buffer) => {
+      const decoded = decoder.decode(chunk, { stream: true });
+      for (const line of decoded.split('\n')) {
+        if (!line.trim()) continue;
+        try {
+          const parsed = JSON.parse(line);
+          const out = parsed.text || parsed.content || parsed.message || '';
+          if (out) {
+            text += out;
+            forward?.(out);
+          }
+        } catch {}
+      }
+    });
+
+    child.stderr.on('data', () => {});
+
+    child.on('error', (err) => {
+      settle(() => reject(new Error(`Cannot reach Claude container: ${err.message}`)));
+    });
+    child.on('close', (code) => {
+      if (code === 0) {
+        settle(() => resolve(text));
+      } else {
+        settle(() => reject(new Error(`opencode exited with code ${code}`)));
+      }
+    });
   });
 }
 
@@ -270,6 +378,68 @@ function runGeminiStage(prompt: string, systemPrompt: string, onCancel: (cancel:
   });
 }
 
+/**
+ * Wraps a Claude stage with automatic fallback on token exhaustion.
+ * For grounding (tool-using) stages → opencode with Hy3;
+ * for text-only stages → Gemini.
+ * Claude's partial output is saved to `.loop/promptgen-partial-{stage}.md`
+ * and appended to the fallback's prompt so no context is lost.
+ */
+async function runStageWithFallback(
+  stage: string,
+  query: ClaudeQuery,
+  onCancel: (cancel: () => void) => void,
+  needsTools: boolean,
+  sse: { send: (frame: Record<string, unknown>) => void },
+  forward?: (chunk: string) => void
+): Promise<string> {
+  try {
+    return await runClaudeStage(query, onCancel, forward);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (!isClaudeTokenExhaustion(msg)) throw err;
+
+    const partialText = err instanceof Error ? (err as Error & { partialText?: string }).partialText ?? '' : '';
+
+    // Save partial output
+    const logPath = partialLogPath(query.projectName, stage);
+    if (partialText) {
+      writeProjectFile(query.projectName, logPath, `# Claude partial (${stage}, ${query.model})\n\n${partialText}`).catch(() => {});
+    }
+
+    if (needsTools) {
+      const fallbackModel = FALLBACK_MODEL;
+      sse.send({ type: 'note', note: `⚠️ Claude (${query.model}) исчерпал лимит: ${msg.slice(0, 200)} → opencode/${fallbackModel}` });
+      const contextSuffix = partialText
+        ? `\n\n---\nClaude (${query.model}) начал работу над этим промтом, но у него закончились токены.\nВот что он успел:\n\n${partialText.slice(-3000)}\n\nПродолжи с места остановки.`
+        : '';
+      return runOpencodeStage(
+        query.projectName,
+        query.prompt + contextSuffix,
+        query.systemPrompt,
+        fallbackModel,
+        query.timeoutMs,
+        onCancel,
+        forward,
+      );
+    }
+
+    // Text-only fallback → Gemini
+    sse.send({ type: 'note', note: `⚠️ Claude (${query.model}) исчерпал лимит: ${msg.slice(0, 200)} → Gemini` });
+    const contextSuffix = partialText
+      ? `\n\n---\nClaude начал работу, но у него закончились токены.\nВот что он успел:\n\n${partialText.slice(-3000)}\n\nПродолжи.`
+      : '';
+    return runGeminiStage(query.prompt + contextSuffix, query.systemPrompt, onCancel);
+  }
+}
+
+/** Clean leftover promptgen partial logs from previous runs. */
+async function cleanupPromptgenLogs(project: string): Promise<void> {
+  for (const stage of ['draft', 'critique', 'redo']) {
+    await writeProjectFile(project, partialLogPath(project, stage), '').catch(() => {});
+  }
+}
+
 router.post('/', async (req: Request<{ id: string }>, res: Response) => {
   const projectName = req.params.id;
   if (!isValidProjectName(projectName)) {
@@ -290,6 +460,9 @@ router.post('/', async (req: Request<{ id: string }>, res: Response) => {
   const settings = parseSettings(rawSettings);
   const toolPolicy = settings.grounding === 'off' ? { disallowedTools: NO_TOOLS } : { allowedTools: READ_ONLY_TOOLS };
 
+  // Wipe partial logs from previous runs
+  cleanupPromptgenLogs(projectName);
+
   let closed = false;
   let cancelCurrent = () => {};
   const sse = openSse(res, () => {
@@ -304,7 +477,8 @@ router.post('/', async (req: Request<{ id: string }>, res: Response) => {
     // Auto-fix replaces the draft wholesale, so streaming it live would show text
     // that gets thrown away; every other mode's draft is (part of) the final answer.
     const draftIsFinal = settings.selfCritique !== 'auto-fix';
-    let current = await runClaudeStage(
+    let current = await runStageWithFallback(
+      'draft',
       {
         projectName,
         prompt: buildDraftPrompt(rough, settings),
@@ -314,13 +488,16 @@ router.post('/', async (req: Request<{ id: string }>, res: Response) => {
         ...toolPolicy,
       },
       setCancel,
+      settings.grounding !== 'off', // needs tools for grounding
+      sse,
       draftIsFinal ? (chunk) => sse.send({ type: 'text', text: chunk }) : undefined
     );
     if (closed) return;
 
     if (settings.selfCritique !== 'off') {
       const critiqueIsFinal = settings.selfCritique === 'auto-fix';
-      const critique = await runClaudeStage(
+      const critique = await runStageWithFallback(
+        'critique',
         {
           projectName,
           prompt: buildCriticPrompt(current, settings.selfCritique),
@@ -330,6 +507,8 @@ router.post('/', async (req: Request<{ id: string }>, res: Response) => {
           disallowedTools: NO_TOOLS,
         },
         setCancel,
+        false, // text-only, no tools
+        sse,
         critiqueIsFinal ? (chunk) => sse.send({ type: 'text', text: chunk }) : undefined
       );
       if (critiqueIsFinal) {
@@ -351,7 +530,8 @@ router.post('/', async (req: Request<{ id: string }>, res: Response) => {
         sse.send({ type: 'note', note: `Критика Gemini:\n${geminiCritique}` });
 
         sse.send({ type: 'reset' });
-        current = await runClaudeStage(
+        current = await runStageWithFallback(
+          'redo',
           {
             projectName,
             prompt: buildRedoPrompt(current, geminiCritique),
@@ -361,6 +541,8 @@ router.post('/', async (req: Request<{ id: string }>, res: Response) => {
             ...toolPolicy,
           },
           setCancel,
+          settings.grounding !== 'off', // needs tools for grounding
+          sse,
           (chunk) => sse.send({ type: 'text', text: chunk })
         );
       } catch (err) {

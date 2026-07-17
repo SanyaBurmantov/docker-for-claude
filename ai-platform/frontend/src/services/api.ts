@@ -348,6 +348,12 @@ export async function streamGeminiChat(
   await consumeTextStream(res, onText)
 }
 
+/** Streams a 2-4 line summary of everything committed today across all projects. */
+export async function streamDayLog(onText: (chunk: string) => void, signal?: AbortSignal): Promise<void> {
+  const res = await fetch('/api/system/daylog', { signal })
+  await consumeTextStream(res, onText)
+}
+
 /** "what" describes the selection alone; "how" lets Claude read the project. */
 export type ExplainMode = 'what' | 'how'
 

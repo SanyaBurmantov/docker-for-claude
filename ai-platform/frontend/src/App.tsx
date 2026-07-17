@@ -3,6 +3,7 @@ import Dashboard from './pages/Dashboard'
 import ProjectPage from './pages/ProjectPage'
 import GeminiPanel from './components/GeminiPanel'
 import Clock from './components/Clock'
+import DayLogButton from './components/DayLogButton'
 import { novncUrl } from './services/api'
 
 function App() {
@@ -13,6 +14,7 @@ function App() {
         <div className="navbar-links">
           <Link to="/" className="nav-link">Projects</Link>
           <a href={novncUrl()} className="nav-link" target="_blank" rel="noopener noreferrer">noVNC</a>
+          <DayLogButton />
           <Clock />
         </div>
       </nav>

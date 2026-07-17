@@ -42,7 +42,7 @@ test('parseSettings keeps every valid override', () => {
 
 test('representativeModel maps engine to a priced model', () => {
   assert.equal(representativeModel('gemini'), 'gemini-3.1-flash-lite');
-  assert.equal(representativeModel('opencode'), 'deepseek');
+  assert.equal(representativeModel('opencode'), 'hy3-free');
   // 'any' and 'claude' resolve to the Claude model this route runs.
   assert.ok(['opus', 'sonnet', 'haiku', 'fable'].includes(representativeModel('any')));
 });
@@ -52,8 +52,8 @@ test('estimateCost is deterministic: ~4 chars per token, priced per engine', () 
   const c = estimateCost(prompt, 'opencode');
   assert.equal(c.chars, 400);
   assert.equal(c.tokensApprox, 100); // ceil(400 / 4)
-  assert.equal(c.model, 'deepseek');
-  // deepseek input is $0.14 / 1M tok → 100 tok = $0.000014
+  assert.equal(c.model, 'hy3-free');
+  // hy3-free (stand-in) input is $0.14 / 1M tok → 100 tok = $0.000014
   assert.ok(Math.abs(c.estimateInUsd - 0.000014) < 1e-9);
 });
 

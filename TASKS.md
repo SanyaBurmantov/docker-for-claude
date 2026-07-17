@@ -17,6 +17,7 @@
 - [ ] Время в хедере сделать в формате AM PM
 - [ ] Починить создание мра
 - [ ] Добавить уведомление звуков и в title страницы о завершении действия или ожидания ответа
+- [x] sk-ws-H.XHIHEL.UCgD.MEYCIQCK-QzMni3OF_RRjmOzCyd2FKdk8Hvbd212KZCbqqMHuwIhAIL1Nij2rJBEVeebdVEftWFheZqs13txl4zQKHMzHrep апи, https://dashscope-intl.aliyuncs.com/apps/anthropic ссылка, надо сюда прикрутить еще и квина
 
 ## Примечания
 

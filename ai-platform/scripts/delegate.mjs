@@ -1,11 +1,12 @@
 #!/usr/bin/env node
 // Делегирование механической работы дешёвым моделям — из сессии Claude Code или руками.
 //
-//   node scripts/delegate.mjs <project> deepseek "<промпт|->"
+//   node scripts/delegate.mjs <project> hy3 "<промпт|->"
+//   node scripts/delegate.mjs <project> dashscope "<промпт|->"
 //   node scripts/delegate.mjs <project> opencode:<provider/model> "<промпт|->"
 //   node scripts/delegate.mjs <project> gemini "<промпт|->" [model]
 //
-// deepseek / opencode:* — tool-capable: правит файлы и гоняет Bash внутри контейнера
+// hy3 / dashscope / opencode:* — tool-capable: правит файлы и гоняет Bash внутри контейнера
 // ai-claude, в /workspace/<project>. gemini — чистый текст-в/текст-из через бэкенд
 // платформы (/api/gemini/chat), файлов не видит.
 //
@@ -23,9 +24,10 @@ function usage() {
   console.error(
     [
       'Использование:',
-      '  node scripts/delegate.mjs <project> deepseek "<промпт|->"',
-      '  node scripts/delegate.mjs <project> opencode:<provider/model> "<промпт|->"',
-      '  node scripts/delegate.mjs <project> gemini "<промпт|->" [model]',
+    '  node scripts/delegate.mjs <project> hy3 "<промпт|->"',
+    '  node scripts/delegate.mjs <project> dashscope "<промпт|->"',
+    '  node scripts/delegate.mjs <project> opencode:<provider/model> "<промпт|->"',
+    '  node scripts/delegate.mjs <project> gemini "<промпт|->" [model]',
     ].join('\n')
   );
   process.exit(2);
@@ -127,7 +129,8 @@ if (!prompt.trim()) {
 }
 
 if (engine === 'gemini') await runGemini(prompt, geminiModel);
-else if (engine === 'deepseek') runOpencode(project, prompt, 'deepseek/deepseek-chat');
+else if (engine === 'hy3') runOpencode(project, prompt, 'opencode/hy3-free');
+else if (engine === 'dashscope') runOpencode(project, prompt, 'dashscope/qwen-max');
 else if (engine.startsWith('opencode:') && engine.length > 'opencode:'.length)
   runOpencode(project, prompt, engine.slice('opencode:'.length));
 else usage();

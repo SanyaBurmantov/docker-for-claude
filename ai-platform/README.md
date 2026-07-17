@@ -93,11 +93,21 @@ docker compose up -d
 
 | | Claude Code | opencode |
 |---|---|---|
-| Модели | Anthropic | много провайдеров (`/models` внутри opencode) |
-| Авторизация | OAuth через noVNC | `opencode auth login` на вкладке **Shell**, один раз |
+| Модели | Anthropic | много провайдеров (`/models` внутри opencode), включая **Qwen** через DashScope |
+| Авторизация | OAuth через noVNC | `opencode auth login` на вкладке **Shell**, один раз; DashScope — через `DASHSCOPE_API_KEY` в `.env` |
 | Запуск сразу с задачей | да | нет — задача вводится в самом TUI |
 
 Токены провайдеров opencode лежат в volumes `opencode-data` / `opencode-config` и переживают пересборку. Список агентов backend определяет по `--version` внутри контейнера: если opencode не установлен, выпадающий список не показывается и всё работает как раньше.
+
+### DashScope / Qwen
+
+В контейнере предустановлен конфиг `opencode.json` с провайдером `dashscope` (OpenAI-совместимый эндпоинт `dashscope-intl.aliyuncs.com/compatible-mode/v1`). Ключ задаётся переменной `DASHSCOPE_API_KEY` в `.env` и пробрасывается в контейнер через `docker-compose.yml`.
+
+**Использование в opencode (интерактивно):** запустите opencode, введите `/models`, выберите `dashscope/qwen-max` (или другую модель из списка).
+
+**Через делегирование:** `node scripts/delegate.mjs <project> dashscope "сделай ..."` — открывает Qwen с инструментами в контейнере.
+
+Модели по умолчанию: `qwen-max`, `qwen-max-latest`, `qwen-plus`, `qwen-turbo`, `qwen3-coder-plus`. Полный список — в `claude-container/opencode.json`.
 
 ### Git: push/pull
 

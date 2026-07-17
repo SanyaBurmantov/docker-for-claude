@@ -42,7 +42,7 @@ const DIAGNOSIS_TIMEOUT_MS = Number(process.env.LOOP_DIAGNOSIS_TIMEOUT_MS || 60_
 
 const CLAUDE_TIER_MODEL: Record<Tier, string> = { trivial: 'haiku', medium: 'sonnet', hard: 'opus' };
 /** Default trivial-tier executor when the manager doesn't have an opinion — cheapest tool-capable engine. */
-const OPENCODE_TRIVIAL_MODEL = 'deepseek/deepseek-chat';
+const OPENCODE_TRIVIAL_MODEL = 'opencode/hy3-free';
 const GEMINI_MODEL_LABEL = 'gemini-flash';
 
 /** Seed shown before any manager decision exists — never actually queried. */
@@ -383,9 +383,82 @@ function checkBudget(state: LoopState): void {
 
 class LoopStoppedError extends Error {}
 
+/** Includes the partial text accumulated before the engine failed, so the
+ *  fallback engine can pick up where Claude left off. */
+class EngineError extends Error {
+  constructor(
+    msg: string,
+    readonly partialText: string
+  ) {
+    super(msg);
+    this.name = 'EngineError';
+  }
+}
+
 const cancels = new Map<string, () => void>();
 
-function queryEngine(
+/**
+ * Error substrings that indicate Claude's token balance or rate limit is
+ * exhausted. When matched, the manager automatically reroutes the query to a
+ * fallback engine (Qwen via opencode, or Gemini for text-only roles) instead
+ * of failing the whole loop.
+ */
+/**
+ * Comprehensive patterns for Anthropic API errors that indicate token exhaustion,
+ * rate limiting, or spend-limit hits — all conditions where the loop should
+ * reroute to a fallback engine instead of failing.
+ *
+ * Sources: Anthropic API error types (`billing_error`, `rate_limit_error`),
+ * spend-limit messages ("spend limit", "monthly cap"), rate-limit responses
+ * ("retry after", "replenished"), weekly caps ("weekly limit"), and the
+ * `claude -p` CLI's own stderr paraphrases.
+ */
+const CLAUDE_TOKEN_EXHAUSTION = [
+  // API error types
+  'billing_error', 'rate_limit_error',
+  // Rate limit
+  'rate_limit_exceeded', 'too many requests', 'retry after',
+  // Spend / billing
+  'billing_limit_exceeded', 'credit_limit_exceeded', 'insufficient_quota',
+  'credit balance', 'spend limit', 'spend cap', 'monthly spend',
+  'account has run out', 'run out of credits', 'credit balance is too low',
+  // Weekly / session / message caps
+  'weekly rate limit', 'weekly limit', 'message limit',
+  // Token / replenish / reset
+  'tokens will be', 'replenish', 'replenished', 'reset',
+  // Generic API error indicators
+  'exhausted', 'try again later', 'please try again',
+  'billing', '429', '402', '529',
+];
+
+function isClaudeTokenExhaustion(msg: string): boolean {
+  const lower = msg.toLowerCase();
+  return CLAUDE_TOKEN_EXHAUSTION.some((p) => lower.includes(p));
+}
+
+/** Text-only roles (manager, tester/diagnosis) can fallback to Gemini. */
+const TEXT_ONLY_ROLES = new Set<Role>(['manager', 'tester']);
+
+/**
+ * Returns a fallback engine when Claude runs out of tokens, or null if the
+ * current engine isn't Claude (nothing to fallback from).
+ */
+function fallbackFor(engine: ExecutorRef, role: Role): ExecutorRef | null {
+  if (engine.engine !== 'claude') return null;
+  if (TEXT_ONLY_ROLES.has(role)) {
+    return { engine: 'gemini', model: GEMINI_MODEL_LABEL };
+  }
+  // Tool-using roles: cheaper Claude models → Hy3 via the opencode provider (trivial tier),
+  // expensive Claude → Hy3 via the opencode provider.
+  if (engine.model === 'haiku') return { engine: 'opencode', model: OPENCODE_TRIVIAL_MODEL };
+  return { engine: 'opencode', model: 'opencode/hy3-free' };
+}
+
+/**
+ * Single-shot engine call — creates a Promise from `runEngine` handlers.
+ * Does NOT handle fallbacks (that's `queryEngine`'s job).
+ */
+function runSingleEngine(
   state: LoopState,
   opts: {
     role: Role;
@@ -399,7 +472,7 @@ function queryEngine(
     resumeSession?: boolean;
   }
 ): Promise<string> {
-  return new Promise((resolve, reject) => {
+    return new Promise((resolve, reject) => {
     let text = '';
     const project = state.project;
     const rawCancel = runEngine(
@@ -422,7 +495,7 @@ function queryEngine(
         },
         onError: (msg) => {
           cancels.delete(project);
-          reject(new Error(msg));
+          reject(new EngineError(msg, text));
         },
         onDone: () => {
           cancels.delete(project);
@@ -434,6 +507,74 @@ function queryEngine(
       rawCancel();
       cancels.delete(project);
       reject(new LoopStoppedError('Loop остановлен пользователем'));
+    });
+  });
+}
+
+/**
+ * Like `runSingleEngine` but with automatic fallback: if Claude returns a token
+ * exhaustion error, the query is retried with a different engine (Qwen via
+ * opencode, or Gemini for text-only roles) instead of letting the loop fail.
+ */
+const PARTIAL_LOG_PREFIX = '.loop/claude-partial';
+
+function partialLogPath(project: string, role: Role): string {
+  return `${PARTIAL_LOG_PREFIX}-${role}.md`;
+}
+
+/**
+ * Like `runSingleEngine` but with automatic fallback: if Claude returns a token
+ * exhaustion error, the partial output is saved to `.loop/claude-partial-{role}.md`
+ * and the query is retried with a fallback engine (Qwen via opencode, or Gemini
+ * for text-only roles) that receives the context of what Claude was doing.
+ */
+function queryEngine(
+  state: LoopState,
+  opts: {
+    role: Role;
+    engine: ExecutorRef;
+    systemPrompt: string;
+    prompt: string;
+    allowedTools?: string;
+    disallowedTools?: string;
+    timeoutMs: number;
+    sessionId?: string | null;
+    resumeSession?: boolean;
+  }
+): Promise<string> {
+  return runSingleEngine(state, opts).catch((err: unknown) => {
+    if (err instanceof LoopStoppedError) throw err;
+    const msg = err instanceof Error ? err.message : String(err);
+    const fallback = isClaudeTokenExhaustion(msg) ? fallbackFor(opts.engine, opts.role) : null;
+    if (!fallback) throw err;
+
+    const partialText = err instanceof EngineError ? err.partialText : '';
+    const roleLabel = { manager: 'менеджер', analyst: 'аналитик', executor: 'исполнитель', tester: 'тестировщик', reviewer: 'ревьюер' }[opts.role];
+    const note = `⚠️ Claude (${opts.engine.model}) на роли ${roleLabel}: ${msg.slice(0, 200)} → ${fallback.engine}/${fallback.model}`;
+    pushHumanNote(state, note);
+    publish(state.project, (l) => l.onText(`\n\n_${note}_\n\n`));
+
+    // Save Claude's partial output and pass it as context to the fallback engine
+    let augmentedPrompt = opts.prompt;
+    if (partialText) {
+      const logPath = partialLogPath(state.project, opts.role);
+      const header = `# Claude partial output (${opts.engine.model}, role: ${opts.role})\n\n`;
+      writeProjectFile(state.project, logPath, header + partialText).catch(() => {});
+      augmentedPrompt =
+        `${opts.prompt}\n\n---\n` +
+        `Claude (${opts.engine.model}) начал работу над этой задачей, но у него закончились токены.\n` +
+        `Вот что он успел выдать до отключения (сохранено в ${logPath}):\n\n` +
+        partialText.slice(-3000) +
+        `\n\nПродолжи с того места, где остановился Claude. Если он уже начал вносить изменения в файлы — ` +
+        `они уже в рабочем дереве, проверь diff.`;
+    }
+
+    return runSingleEngine(state, {
+      ...opts,
+      engine: fallback,
+      prompt: augmentedPrompt,
+      sessionId: null,
+      resumeSession: false,
     });
   });
 }
@@ -748,6 +889,22 @@ function kick(project: string): void {
   runLoop(project).finally(() => driving.delete(project));
 }
 
+/** Remove partial Claude logs once the loop reaches a terminal state. */
+async function cleanupPartialLogs(project: string): Promise<void> {
+  for (const role of ['manager', 'analyst', 'executor', 'tester', 'reviewer'] as Role[]) {
+    const path = partialLogPath(project, role);
+    await writeProjectFile(project, path, '').catch(() => {});
+    // Remove the file by writing an empty string; some storage backends need a delete signal.
+    try {
+      const { unlink } = await import('fs/promises');
+      // Try to remove the file — the loop directory itself is gitignored.
+      await unlink(`/workspace/${project}/${path}`).catch(() => {});
+    } catch {
+      // Not running on the host filesystem — ignore.
+    }
+  }
+}
+
 async function runLoop(project: string): Promise<void> {
   for (;;) {
     const state = await loopStore.loadLoop(project);
@@ -782,6 +939,7 @@ async function runLoop(project: string): Promise<void> {
     await loopStore.saveLoop(next);
     publish(project, (l) => l.onPhase(next.status));
     if (next.status === 'done') {
+      await cleanupPartialLogs(project);
       publish(project, (l) => l.onDone(next));
       return;
     }

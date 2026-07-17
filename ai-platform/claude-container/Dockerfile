@@ -43,6 +43,12 @@ RUN if id ubuntu >/dev/null 2>&1; then userdel -r ubuntu; fi && \
     usermod -aG sudo claude && \
     echo "claude ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
 
+# Default opencode config with DashScope/Qwen provider. Lives in the image so that
+# the first `docker compose up` initialises the empty `opencode-config` volume with it.
+RUN mkdir -p /home/claude/.config/opencode
+COPY opencode.json /home/claude/.config/opencode/opencode.json
+RUN chown -R ${HOST_UID}:${HOST_GID} /home/claude/.config
+
 COPY scripts/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 

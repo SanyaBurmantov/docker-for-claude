@@ -52,6 +52,7 @@ docker compose -f docker-compose.dev.yml up -d
 
 - Claude Code (`claude`) и opencode (`opencode run --format json -m <provider>/<model> --auto`, поддерживает `--session`/`--continue`) — в контейнере, с инструментами.
 - Gemini (`routes/gemini.ts`) — **чистый чат-API без инструментов**; только для текст-в/текст-из ролей. На текущем ключе генерит **только `gemini-3.1-flash-lite`**.
+- **DashScope (Qwen)** — штатный провайдер opencode, настроенный в `claude-container/opencode.json` (`dashscope/qwen-max`). Ключ задаётся через `DASHSCOPE_API_KEY` в `.env`. Доступен в opencode через `/models` (интерактивно) и через `delegate.mjs dashscope` (CLI).
 - Дефолтная модель при новой разработке — самая свежая Claude (Opus 4.8 / Fable 5).
 
 ## Делегирование дешёвым моделям (`scripts/delegate.mjs`)
@@ -64,12 +65,13 @@ docker compose -f docker-compose.dev.yml up -d
 
 ```bash
 node scripts/delegate.mjs <project> deepseek "точное ТЗ"              # opencode → deepseek, с инструментами, в контейнере
+node scripts/delegate.mjs <project> dashscope "точное ТЗ"              # opencode → dashscope/qwen-max
 node scripts/delegate.mjs <project> opencode:<provider/model> - < тз.md   # промпт «-» = stdin, для больших ТЗ
 node scripts/delegate.mjs <project> gemini "суммаризируй: …"          # текст-в/текст-из, без инструментов, ~бесплатно
 ```
 
-Нужен запущенный контейнер `ai-claude` (deepseek/opencode) или бэкенд платформы (gemini).
-Результат deepseek — черновик: diff и тесты после него проверяет делегировавший.
+Нужен запущенный контейнер `ai-claude` (deepseek/dashscope/opencode) или бэкенд платформы (gemini).
+Результат deepseek/dashscope — черновик: diff и тесты после него проверяет делегировавший.
 
 ## Текущая крупная работа
 
