@@ -348,9 +348,9 @@ export async function streamGeminiChat(
   await consumeTextStream(res, onText)
 }
 
-/** Streams a 2-4 line summary of everything committed today across all projects. */
-export async function streamDayLog(onText: (chunk: string) => void, signal?: AbortSignal): Promise<void> {
-  const res = await fetch('/api/system/daylog', { signal })
+/** Streams a 2-4 line summary of this project's commits made today. */
+export async function streamDayLog(id: string, onText: (chunk: string) => void, signal?: AbortSignal): Promise<void> {
+  const res = await fetch(`/api/projects/${id}/git/daylog`, { signal })
   await consumeTextStream(res, onText)
 }
 

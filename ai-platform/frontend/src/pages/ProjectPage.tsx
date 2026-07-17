@@ -4,7 +4,7 @@ import {
   getProject, getSessionStatus, startSession, stopSession, markProjectOpened,
   getGitStatus, getGitDiff, getGitLog, getGitShow, getGitBranches,
   gitCommit, gitBranch, gitCheckout, gitPull, gitPush, gitRollback,
-  saveGitCredentials, archiveUrl, streamReview, generateCommitMessage,
+  saveGitCredentials, archiveUrl, streamReview, streamDayLog, generateCommitMessage,
   fetchChecklistFile, saveChecklistFile, TASKS_FILE, FIXES_FILE,
   fetchAgents, AgentId, AgentInfo,
   Project, novncUrl, StartSessionOptions,
@@ -98,6 +98,9 @@ export default function ProjectPage() {
   const [reviewing, setReviewing] = useState(false)
   const [savingFindings, setSavingFindings] = useState(false)
   const reviewAbortRef = useRef<AbortController | null>(null)
+  const [dayLog, setDayLog] = useState('')
+  const [dayLogError, setDayLogError] = useState('')
+  const [dayLogLoading, setDayLogLoading] = useState(false)
   const [credHost, setCredHost] = useState('github.com')
   const [credUser, setCredUser] = useState('')
   const [credToken, setCredToken] = useState('')
@@ -389,6 +392,20 @@ export default function ProjectPage() {
     reviewAbortRef.current?.abort()
     reviewAbortRef.current = null
     setReviewing(false)
+  }
+
+  async function handleDayLog() {
+    if (!id || dayLogLoading) return
+    setDayLog('')
+    setDayLogError('')
+    setDayLogLoading(true)
+    try {
+      await streamDayLog(id, (chunk) => setDayLog((prev) => prev + chunk))
+    } catch (e) {
+      setDayLogError(e instanceof Error ? e.message : 'Unknown error')
+    } finally {
+      setDayLogLoading(false)
+    }
   }
 
   /**
@@ -763,6 +780,25 @@ export default function ProjectPage() {
                   Rollback
                 </button>
               </div>
+            </div>
+
+            <div>
+              <div className="review-header">
+                <h3 className="section-title">Трудозатраты за день</h3>
+                <button className="btn btn-secondary btn-sm" onClick={handleDayLog} disabled={dayLogLoading}>
+                  {dayLogLoading ? 'Собираю…' : 'Показать'}
+                </button>
+              </div>
+              {dayLogError ? (
+                <div className="git-output review-error">{dayLogError}</div>
+              ) : dayLog ? (
+                <div className="git-output" style={{ whiteSpace: 'pre-wrap' }}>
+                  {dayLog}
+                  {dayLogLoading && <span className="gemini-caret" />}
+                </div>
+              ) : dayLogLoading ? (
+                <div className="git-output review-waiting">Читаю коммиты за сегодня…</div>
+              ) : null}
             </div>
 
             <div>
