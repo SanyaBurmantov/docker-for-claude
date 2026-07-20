@@ -1,5 +1,5 @@
-Аккаут Claude купил в https://plati.market/itm/24-7-claude-ai-5-0-pro-max-code-subscription-to-your-account-1-month-auto/5652859
-Прокси в https://proxymania.su/
+## Аккаут Claude купил в https://plati.market/itm/24-7-claude-ai-5-0-pro-max-code-subscription-to-your-account-1-month-auto/5652859
+## Прокси в https://proxymania.su/
 
 # AI Platform — локальная Claude Code IDE
 
