@@ -267,4 +267,4 @@ curl http://localhost:9900
 ```
 TRC20 TVnU9zWAEZdP2DfhQhKx3Zsiarn6uaHpzY
 ```
-![TRC20](trc20.png)
+![TRC20](trc20.jpg)
