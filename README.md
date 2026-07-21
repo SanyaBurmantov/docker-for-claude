@@ -262,3 +262,8 @@ docker exec ai-backend curl http://localhost:3000/api/health
 docker compose logs frontend
 curl http://localhost:9900
 ```
+
+### Поблагодарить автора, на кофе и подписку
+```
+TRC20 TVnU9zWAEZdP2DfhQhKx3Zsiarn6uaHpzY
+```
