@@ -685,6 +685,31 @@ export default function ProjectPage() {
             </div>
 
             <div>
+              <h3 className="section-title">Коммит</h3>
+              <div className="git-controls">
+                <input
+                  type="text"
+                  placeholder="Commit message..."
+                  value={commitMessage}
+                  onChange={(e) => setCommitMessage(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleCommit()}
+                  disabled={generatingMessage}
+                />
+                <button
+                  className="btn btn-secondary btn-sm"
+                  onClick={handleGenerateCommitMessage}
+                  disabled={generatingMessage || !gitDiff}
+                  title={gitDiff ? 'Claude напишет сообщение по диффу' : 'Нет изменений'}
+                >
+                  {generatingMessage ? 'Пишет…' : '✦ Создать сообщение'}
+                </button>
+                <button className="btn btn-primary btn-sm" onClick={handleCommit} disabled={generatingMessage}>
+                  Commit
+                </button>
+              </div>
+            </div>
+
+            <div>
               <div className="review-header">
                 <h3 className="section-title">Трудозатраты за день</h3>
                 <button className="btn btn-secondary btn-sm" onClick={handleDayLog} disabled={dayLogLoading}>
@@ -762,29 +787,8 @@ export default function ProjectPage() {
             </div>
 
             <div>
-              <h3 className="section-title">Actions</h3>
+              <h3 className="section-title">Ветки</h3>
               <div className="git-controls">
-                <input
-                  type="text"
-                  placeholder="Commit message..."
-                  value={commitMessage}
-                  onChange={(e) => setCommitMessage(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && handleCommit()}
-                  disabled={generatingMessage}
-                />
-                <button
-                  className="btn btn-secondary btn-sm"
-                  onClick={handleGenerateCommitMessage}
-                  disabled={generatingMessage || !gitDiff}
-                  title={gitDiff ? 'Claude напишет сообщение по диффу' : 'Нет изменений'}
-                >
-                  {generatingMessage ? 'Пишет…' : '✦ Создать сообщение'}
-                </button>
-                <button className="btn btn-primary btn-sm" onClick={handleCommit} disabled={generatingMessage}>
-                  Commit
-                </button>
-              </div>
-              <div className="git-controls" style={{ marginTop: 8 }}>
                 <input
                   type="text"
                   placeholder="Branch name..."
