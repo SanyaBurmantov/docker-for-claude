@@ -2047,6 +2047,17 @@ button.nav-link {
   font-size: 0.75rem;
 }
 
+.hr-group-title {
+  margin-top: 10px;
+  padding: 6px 0 4px;
+  color: var(--brass);
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-bottom: 1px solid var(--line-strong);
+}
+
 .hr-k { color: var(--text-dim); }
 
 .hr-v {

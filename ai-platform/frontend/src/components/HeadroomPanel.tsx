@@ -18,6 +18,38 @@ function formatValue(v: unknown): string {
   return String(v)
 }
 
+function isPlainObject(v: unknown): v is Record<string, unknown> {
+  return typeof v === 'object' && v !== null && !Array.isArray(v)
+}
+
+/** snake_case / camelCase key → readable label. */
+function label(k: string): string {
+  return k.replace(/_/g, ' ').replace(/([a-z])([A-Z])/g, '$1 $2')
+}
+
+/** Renders stats as k/v rows; nested objects become indented, titled groups. */
+function StatRows({ stats, depth = 0 }: { stats: Record<string, unknown>; depth?: number }) {
+  return (
+    <>
+      {Object.entries(stats).map(([k, v]) =>
+        isPlainObject(v) ? (
+          <div key={k} className="hr-group">
+            <div className="hr-group-title" style={{ paddingLeft: depth * 12 }}>
+              {label(k)}
+            </div>
+            <StatRows stats={v} depth={depth + 1} />
+          </div>
+        ) : (
+          <div key={k} className="hr-row" style={{ paddingLeft: depth * 12 }}>
+            <span className="hr-k">{label(k)}</span>
+            <span className="hr-v">{formatValue(v)}</span>
+          </div>
+        ),
+      )}
+    </>
+  )
+}
+
 /**
  * The /stats shape is not contracted, so instead of naming a field we scan one
  * level for a numeric "…saved…tokens…" (or any "saved") number to headline on the
@@ -114,12 +146,7 @@ export default function HeadroomPanel({ active }: { active: boolean }) {
         {status === 'ok' && (
           <div className="hr-stats">
             {entries.length === 0 && <p className="hr-empty">Прокси не отдал ни одного поля.</p>}
-            {entries.map(([k, v]) => (
-              <div key={k} className="hr-row">
-                <span className="hr-k">{k}</span>
-                <span className="hr-v">{formatValue(v)}</span>
-              </div>
-            ))}
+            {state?.stats && <StatRows stats={state.stats} />}
           </div>
         )}
 
