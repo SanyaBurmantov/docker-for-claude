@@ -43,6 +43,12 @@ RUN curl -LsSf https://astral.sh/uv/install.sh | env UV_INSTALL_DIR=/usr/local/b
       --with fastapi --with uvicorn --with 'httpx[http2]' && \
     chmod -R a+rX /opt/uv && rm -rf /root/.cache/uv
 
+# Output-token reduction: trim what the model writes back (verbosity steering,
+# effort routing) via headroom's proxy. On by default so every claude-hr /
+# headroom proxy invocation cuts output tokens without extra flags.
+ENV HEADROOM_OUTPUT_SHAPER=1
+ENV HEADROOM_VERBOSITY_LEVEL=3
+
 # claude-hr: launches Claude Code behind the Headroom proxy. Kept as a real binary
 # on PATH so the backend agent registry can spawn it exactly like `claude`.
 COPY scripts/claude-hr /usr/local/bin/claude-hr

@@ -60,6 +60,23 @@ cat > "$SETTINGS" << 'EOF'
 EOF
 fi
 
+# --------------------------------------------------
+# Auto-start Headroom compression proxy
+# --------------------------------------------------
+if ! curl -sf http://127.0.0.1:8787/livez >/dev/null 2>&1; then
+  nohup headroom proxy >/tmp/headroom-proxy.log 2>&1 &
+  for _ in $(seq 1 40); do
+    if curl -sf http://127.0.0.1:8787/readyz >/dev/null 2>&1; then
+      echo "[OK] Headroom proxy ready (PID: $(pgrep -xf '.*headroom proxy' || echo unknown))"
+      break
+    fi
+    sleep 0.5
+  done
+  if ! curl -sf http://127.0.0.1:8787/livez >/dev/null 2>&1; then
+    echo "[WARN] Headroom proxy not started — check /tmp/headroom-proxy.log"
+  fi
+fi
+
 echo "Claude Code container ready"
 echo "Projects are in /workspace"
 echo "Run: claude"
