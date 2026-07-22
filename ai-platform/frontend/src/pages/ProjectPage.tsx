@@ -14,6 +14,7 @@ import TerminalComponent from '../components/Terminal'
 import DiffViewer from '../components/DiffViewer'
 import FileExplorer from '../components/FileExplorer'
 import ChecklistPanel, { TASKS_COPY, FIXES_COPY } from '../components/ChecklistPanel'
+import AutoGrowTextarea from '../components/AutoGrowTextarea'
 import Modal, { ConfirmDialog } from '../components/Modal'
 import { useToast } from '../components/Toast'
 
@@ -586,18 +587,20 @@ export default function ProjectPage() {
             scrollback and reconnect to a fresh pty attach, which only redraws the current tmux
             screen, not its history. CSS hides them instead; `visible` tells xterm to refit. */}
         <div style={{ display: activeTab === 'terminal' ? undefined : 'none' }}>
-          <div className="diff-controls">
-            <button
-              className="btn btn-secondary btn-sm"
-              onClick={() => requestRestart()}
-              disabled={starting}
-              title={`Перезапустить ${agentLabel} с чистым контекстом`}
-            >
-              ✦ Новая задача
-            </button>
-            <span className="tasks-hint">Закрывает диалог и открывает {agentLabel} заново</span>
-          </div>
-          <TerminalComponent sessionId={sessionId} visible={activeTab === 'terminal'} />
+          <TerminalComponent
+            sessionId={sessionId}
+            visible={activeTab === 'terminal'}
+            toolbarExtra={
+              <button
+                className="btn btn-secondary btn-sm"
+                onClick={() => requestRestart()}
+                disabled={starting}
+                title={`Перезапустить ${agentLabel} с чистым контекстом — закрывает диалог и открывает заново`}
+              >
+                ✦ Новая задача
+              </button>
+            }
+          />
         </div>
 
         {id && (
@@ -683,12 +686,16 @@ export default function ProjectPage() {
             <div>
               <h3 className="section-title">Коммит</h3>
               <div className="git-controls">
-                <input
-                  type="text"
+                <AutoGrowTextarea
                   placeholder="Commit message..."
                   value={commitMessage}
                   onChange={(e) => setCommitMessage(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && handleCommit()}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault()
+                      handleCommit()
+                    }
+                  }}
                   disabled={generatingMessage}
                 />
                 <button
@@ -708,20 +715,17 @@ export default function ProjectPage() {
             <div>
               <h3 className="section-title">Трудозатраты за день</h3>
               <div className="git-controls">
+                <AutoGrowTextarea
+                  placeholder="Отчёт о трудозатратах за день…"
+                  value={dayLog}
+                  onChange={(e) => setDayLog(e.target.value)}
+                  disabled={dayLogLoading}
+                />
                 <button className="btn btn-secondary btn-sm" onClick={handleDayLog} disabled={dayLogLoading}>
-                  {dayLogLoading ? 'Собираю…' : 'Показать'}
+                  {dayLogLoading ? 'Собираю…' : '✦ Сформировать'}
                 </button>
               </div>
-              {dayLogError ? (
-                <div className="git-output review-error">{dayLogError}</div>
-              ) : dayLog ? (
-                <div className="git-output" style={{ whiteSpace: 'pre-wrap' }}>
-                  {dayLog}
-                  {dayLogLoading && <span className="gemini-caret" />}
-                </div>
-              ) : dayLogLoading ? (
-                <div className="git-output review-waiting">Читаю коммиты за сегодня…</div>
-              ) : null}
+              {dayLogError && <div className="git-output review-error">{dayLogError}</div>}
             </div>
 
             <div>

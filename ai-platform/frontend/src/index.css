@@ -708,6 +708,43 @@ button.nav-link {
   color: var(--text-faint);
 }
 
+.terminal-clip {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+  margin-top: 8px;
+}
+
+.terminal-clip-field {
+  flex: 1;
+  min-height: 44px;
+  max-height: 160px;
+  padding: 8px 12px;
+  background: var(--bg-1);
+  border: 1px solid var(--line);
+  color: var(--text);
+  font-size: 0.78rem;
+  font-family: var(--font-mono);
+  resize: vertical;
+  clip-path: var(--cut-sm);
+}
+
+.terminal-clip-field:focus {
+  outline: none;
+  border-color: var(--cyan);
+  box-shadow: var(--glow-cyan);
+}
+
+.terminal-clip-field::placeholder {
+  color: var(--text-faint);
+}
+
+.terminal-clip-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
 /* ============ DIFF ============ */
 
 .diff-container {
@@ -1127,6 +1164,36 @@ button.nav-link {
 }
 
 .git-controls input[type='text']:focus {
+  outline: none;
+  border-color: var(--cyan);
+  box-shadow: var(--glow-cyan);
+}
+
+/* Auto-growing fields (commit message, daylog): same look as the text input,
+   height driven by AutoGrowTextarea — no manual resize, hide scrollbar so
+   scrollHeight measures the full content. */
+.git-controls textarea {
+  flex: 1;
+  min-width: 220px;
+  max-width: 460px;
+  padding: 8px 12px;
+  background: var(--bg-1);
+  border: 1px solid var(--line);
+  color: var(--text);
+  font-size: 0.85rem;
+  font-family: inherit;
+  line-height: 1.4;
+  resize: none;
+  overflow: hidden;
+  clip-path: var(--cut-sm);
+}
+
+/* Keep the button pinned to the top of the field as it grows. */
+.git-controls:has(textarea) {
+  align-items: flex-start;
+}
+
+.git-controls textarea:focus {
   outline: none;
   border-color: var(--cyan);
   box-shadow: var(--glow-cyan);
@@ -1846,4 +1913,62 @@ button.nav-link {
 @media (max-width: 640px) {
   .gemini-panel { width: 100%; }
   .gemini-tab-open { left: auto; right: 0; border-right: none; border-left: 1px solid var(--line-strong); }
+}
+
+/* ============ SITE FOOTER (repo + donate) ============ */
+
+.site-footer {
+  position: fixed;
+  bottom: 12px;
+  right: 16px;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.footer-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  color: var(--text-dim);
+  border: 1px solid var(--line);
+  background: var(--bg-1);
+  clip-path: var(--cut-sm);
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.footer-icon:hover {
+  color: var(--cyan);
+  border-color: var(--cyan);
+}
+
+.donate-body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.donate-qr {
+  max-width: 240px;
+  width: 100%;
+  height: auto;
+}
+
+.donate-label {
+  font-family: var(--font-display);
+  letter-spacing: 2px;
+  color: var(--text-dim);
+  font-size: 0.8rem;
+}
+
+.donate-address {
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+  color: var(--cyan);
+  word-break: break-all;
+  text-align: center;
 }

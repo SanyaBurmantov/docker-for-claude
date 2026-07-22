@@ -63,7 +63,7 @@ export default function Clock() {
       dateTime={now.toISOString()}
       title={`${now.toLocaleDateString('ru-RU', { dateStyle: 'full', ...opts })} · ${sync.timeZone}`}
     >
-      {now.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit', ...opts })}
+      {now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true, ...opts })}
     </time>
   )
 }

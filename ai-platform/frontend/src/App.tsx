@@ -3,6 +3,7 @@ import Dashboard from './pages/Dashboard'
 import ProjectPage from './pages/ProjectPage'
 import GeminiPanel from './components/GeminiPanel'
 import Clock from './components/Clock'
+import SiteFooter from './components/SiteFooter'
 import { novncUrl } from './services/api'
 
 function App() {
@@ -23,6 +24,7 @@ function App() {
         </Routes>
       </main>
       <GeminiPanel />
+      <SiteFooter />
     </div>
   )
 }

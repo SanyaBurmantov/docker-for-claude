@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Terminal as XTerm } from 'xterm'
 import { FitAddon } from 'xterm-addon-fit'
 import { WebLinksAddon } from 'xterm-addon-web-links'
@@ -11,6 +11,9 @@ interface TerminalProps {
   /** The parent keeps this mounted across tab switches and hides it with CSS; `fit()` needs
    *  a re-run once it's visible again since it can't measure a `display:none` container. */
   visible?: boolean
+  /** Rendered at the left of the toolbar row — lets the parent put its own controls
+   *  (e.g. "Новая задача") on the same line as the font/search controls. */
+  toolbarExtra?: ReactNode
 }
 
 /** Copy to clipboard. Falls back to a hidden-textarea `execCommand` because
@@ -41,13 +44,17 @@ function execCopy(text: string) {
   document.body.removeChild(ta)
 }
 
-export default function Terminal({ sessionId, visible = true }: TerminalProps) {
+export default function Terminal({ sessionId, visible = true, toolbarExtra }: TerminalProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const xtermRef = useRef<XTerm | null>(null)
   const fitAddonRef = useRef<FitAddon | null>(null)
   const searchAddonRef = useRef<SearchAddon | null>(null)
   const searchInputRef = useRef<HTMLInputElement>(null)
   const [searchQuery, setSearchQuery] = useState('')
+  // Clipboard bridge: on a non-secure origin (http via LAN IP) the browser blocks
+  // the clipboard API, so terminal copy can't reach the OS buffer. Selected text
+  // is mirrored here instead — a real textarea the user can copy from natively.
+  const [clip, setClip] = useState('')
   const [fontSize, setFontSize] = useState(() => {
     const saved = Number(localStorage.getItem('terminal-font-size'))
     return saved >= 8 && saved <= 24 ? saved : 13
@@ -122,9 +129,18 @@ export default function Terminal({ sessionId, visible = true }: TerminalProps) {
       return true
     })
 
-    // Mirror any drag-selection straight into the clipboard so a bare select is
-    // enough to copy; empty selections (a plain click) are ignored by copyText.
-    term.onSelectionChange(() => copyText(term.getSelection()))
+    // Mirror any drag-selection into the bridge field below; a plain click clears
+    // the selection, so keep the last non-empty text until copied or cleared.
+    // Only the non-focus-stealing async clipboard is attempted here — the
+    // execCopy fallback would call ta.select() on every drag event, yanking the
+    // selection out of the terminal before it finishes. On insecure origins
+    // (where async clipboard is unavailable) the field + button is the path.
+    term.onSelectionChange(() => {
+      const sel = term.getSelection()
+      if (!sel) return
+      setClip(sel)
+      navigator.clipboard?.writeText?.(sel).catch(() => {})
+    })
 
     term.open(containerRef.current)
     term.onData((data) => {
@@ -197,6 +213,7 @@ export default function Terminal({ sessionId, visible = true }: TerminalProps) {
   return (
     <div>
       <div className="terminal-toolbar">
+        {toolbarExtra}
         <div className="terminal-font-controls">
           <button
             className="icon-btn"
@@ -235,6 +252,23 @@ export default function Terminal({ sessionId, visible = true }: TerminalProps) {
             Session not started
           </div>
         )}
+      </div>
+
+      <div className="terminal-clip">
+        <textarea
+          className="terminal-clip-field"
+          placeholder="Выделенное в терминале появляется здесь — отсюда можно скопировать и вставить в браузере"
+          value={clip}
+          onChange={(e) => setClip(e.target.value)}
+        />
+        <div className="terminal-clip-actions">
+          <button className="btn btn-secondary btn-sm" onClick={() => copyText(clip)} disabled={!clip}>
+            Копировать
+          </button>
+          <button className="btn btn-secondary btn-sm" onClick={() => setClip('')} disabled={!clip}>
+            Очистить
+          </button>
+        </div>
       </div>
     </div>
   )
