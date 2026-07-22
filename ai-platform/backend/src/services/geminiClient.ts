@@ -1,8 +1,8 @@
 import { ProxyAgent, Dispatcher } from 'undici';
 
 /**
- * Bits `routes/gemini.ts` (the chat panel) and `services/geminiQuery.ts` (the
- * loop-manager's text-only roles) both need: the key and the outbound proxy.
+ * Bits `routes/gemini.ts` (the chat panel) and `services/geminiQuery.ts`
+ * (text-only roles like daylog) both need: the key and the outbound proxy.
  * Everything else about the two calls (multi-turn chat vs. single prompt)
  * differs enough that unifying further would cost more clarity than it saves.
  */

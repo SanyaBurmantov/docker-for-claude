@@ -9,13 +9,11 @@ import {
   fetchAgents, AgentId, AgentInfo,
   Project, novncUrl, StartSessionOptions,
 } from '../services/api'
-import { parseTasks, serialize, withTasksAdded, Task } from '../services/checklist'
+import { parseTasks, serialize, withTasksAdded } from '../services/checklist'
 import TerminalComponent from '../components/Terminal'
 import DiffViewer from '../components/DiffViewer'
 import FileExplorer from '../components/FileExplorer'
 import ChecklistPanel, { TASKS_COPY, FIXES_COPY } from '../components/ChecklistPanel'
-import ManagerPanel from '../components/ManagerPanel'
-import PromptGenPanel from '../components/PromptGenPanel'
 import Modal, { ConfirmDialog } from '../components/Modal'
 import { useToast } from '../components/Toast'
 
@@ -92,7 +90,6 @@ export default function ProjectPage() {
   const [commitView, setCommitView] = useState<{ hash: string; diff: string } | null>(null)
   const [showCredsModal, setShowCredsModal] = useState(false)
   const [pendingRestart, setPendingRestart] = useState<{ prompt?: string } | null>(null)
-  const [loopStartRequest, setLoopStartRequest] = useState<{ text: string; line: number } | null>(null)
   const [review, setReview] = useState('')
   const [reviewError, setReviewError] = useState('')
   const [reviewing, setReviewing] = useState(false)
@@ -617,7 +614,6 @@ export default function ProjectPage() {
             onDiscuss={(text) =>
               requestRestart(`Давай обсудим задачу, пока ничего не меняя в коде: ${text}`)
             }
-            onSendToLoop={(task: Task) => setLoopStartRequest({ text: task.text, line: task.line })}
           />
         )}
 
@@ -710,8 +706,8 @@ export default function ProjectPage() {
             </div>
 
             <div>
-              <div className="review-header">
-                <h3 className="section-title">Трудозатраты за день</h3>
+              <h3 className="section-title">Трудозатраты за день</h3>
+              <div className="git-controls">
                 <button className="btn btn-secondary btn-sm" onClick={handleDayLog} disabled={dayLogLoading}>
                   {dayLogLoading ? 'Собираю…' : 'Показать'}
                 </button>
@@ -828,16 +824,6 @@ export default function ProjectPage() {
           </div>
         )}
       </div>
-
-      {id && (
-        <ManagerPanel
-          projectId={id}
-          startRequest={loopStartRequest}
-          onStartRequestHandled={() => setLoopStartRequest(null)}
-        />
-      )}
-
-      {id && <PromptGenPanel projectId={id} />}
 
       {pendingRestart && (
         <ConfirmDialog

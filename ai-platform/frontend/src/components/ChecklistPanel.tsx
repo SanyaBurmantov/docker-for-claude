@@ -23,11 +23,9 @@ interface ChecklistPanelProps {
   file: string
   copy: ChecklistCopy
   onDiscuss: (text: string) => void
-  /** Present only on the tasks tab — sends a `- [ ]` line to the loop-manager instead of the terminal. */
-  onSendToLoop?: (task: Task) => void
 }
 
-export default function ChecklistPanel({ projectId, file, copy, onDiscuss, onSendToLoop }: ChecklistPanelProps) {
+export default function ChecklistPanel({ projectId, file, copy, onDiscuss }: ChecklistPanelProps) {
   const toast = useToast()
   const [lines, setLines] = useState<string[] | null>(null)
   const [error, setError] = useState('')
@@ -108,15 +106,6 @@ export default function ChecklistPanel({ projectId, file, copy, onDiscuss, onSen
 
       <span className="task-text">{task.text}</span>
 
-      {onSendToLoop && !task.done && (
-        <button
-          className="btn btn-secondary btn-sm"
-          onClick={() => onSendToLoop(task)}
-          title="Передать в loop-менеджер"
-        >
-          ▶ Loop
-        </button>
-      )}
       <button className="btn btn-secondary btn-sm" onClick={() => onDiscuss(task.text)} title={copy.discussTitle}>
         Обсудить
       </button>

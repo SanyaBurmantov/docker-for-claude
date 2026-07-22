@@ -2,11 +2,17 @@ import { spawn } from 'child_process';
 import { streamClaude } from './claudeQuery';
 import { streamGemini } from './geminiQuery';
 import { EXEC_USER_ARGS, UTF8_EXEC_ENV } from './dockerService';
-import type { ExecutorRef, Role } from './loopTypes';
+
+export type EngineId = 'claude' | 'opencode' | 'gemini';
+export interface ExecutorRef {
+  engine: EngineId;
+  model: string;
+}
+export type Role = 'manager' | 'analyst' | 'executor' | 'tester' | 'reviewer';
 
 /**
- * Unified interface every loop role queries through, so `loopService` never
- * branches on engine — only `runEngine` does.
+ * Unified interface every one-shot engine query goes through, so callers never
+ * branch on engine — only `runEngine` does.
  */
 export interface EngineQuery {
   project: string;
@@ -151,7 +157,7 @@ export function runEngine(q: EngineQuery, h: EngineHandlers): () => void {
     case 'opencode':
       return runOpencode(q, h);
     case 'gemini':
-      // Text-only: no tools, no container — loopService never routes implement/analyze/review here.
+      // Text-only: no tools, no container — used only for text-in/text-out roles.
       return streamGemini({ prompt: q.prompt, systemPrompt: q.systemPrompt, timeoutMs: q.timeoutMs }, h);
   }
 }

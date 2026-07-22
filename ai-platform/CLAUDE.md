@@ -72,7 +72,3 @@ node scripts/delegate.mjs <project> gemini "суммаризируй: …"      
 
 Нужен запущенный контейнер `ai-claude` (deepseek/dashscope/opencode) или бэкенд платформы (gemini).
 Результат deepseek/dashscope — черновик: diff и тесты после него проверяет делегировавший.
-
-## Текущая крупная работа
-
-**Loop-менеджер** (ветка `feat/loop-manager`) — оркестратор поверх `streamClaude`, исполняющий задачи циклом из 5 ролей (менеджер, аналитик, исполнитель, тестировщик, ревьюер) с делегированием по стоимости и гейтом перед правками. Спецификация: `docs/loop-manager-spec.md` (источник истины). Промт для разработки: `docs/loop-manager-prompt.md`. Рантайм-скретч ролей — `<project>/.loop/` (gitignored).

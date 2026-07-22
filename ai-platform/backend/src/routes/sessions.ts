@@ -4,7 +4,6 @@ import { execInContainer, execInContainerSync, tmuxSessionName } from '../servic
 import { isValidProjectName } from '../services/projectService';
 import { AGENTS, DEFAULT_AGENT, isAgentId, type AgentId } from '../services/agents';
 import { getAll, metaFor, update } from '../services/metadataService';
-import { isLoopActive } from '../services/loopService';
 
 const router = Router({ mergeParams: true });
 const CONTAINER_NAME = process.env.CLAUDE_CONTAINER || 'ai-claude';
@@ -21,13 +20,6 @@ router.use((req, res, next) => {
 router.post('/start', async (req: Request<{ id: string }>, res: Response) => {
   try {
     const projectName = req.params.id;
-
-    // A loop owns the working tree while it runs — a manual session editing the
-    // same files underneath it would race the executor (spec §11 exclusive lock).
-    if (await isLoopActive(projectName)) {
-      res.status(409).json({ error: 'Для этого проекта выполняется loop — останови его, чтобы открыть ручную сессию' });
-      return;
-    }
 
     // The tmux session keeps its historical "claude-" name whichever agent runs
     // inside it: the terminal tab, the running-status probe and the stop button

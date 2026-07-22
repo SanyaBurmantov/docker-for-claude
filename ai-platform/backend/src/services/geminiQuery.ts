@@ -1,8 +1,8 @@
 import { fetch } from 'undici';
 import { GEMINI_API_BASE, geminiApiKey, geminiProxyDispatcher } from './geminiClient';
 
-/** The loop-manager's only working Gemini model on this key (per loop-manager-prompt.md §Правила). */
-export const LOOP_GEMINI_MODEL = 'gemini-3.1-flash-lite';
+/** The only Gemini model that generates on this key. */
+export const GEMINI_MODEL = 'gemini-3.1-flash-lite';
 
 export interface GeminiQuery {
   prompt: string;
@@ -49,7 +49,7 @@ export function streamGemini(q: GeminiQuery, h: GeminiHandlers): () => void {
   (async () => {
     let upstream;
     try {
-      upstream = await fetch(`${GEMINI_API_BASE}/models/${LOOP_GEMINI_MODEL}:streamGenerateContent?alt=sse`, {
+      upstream = await fetch(`${GEMINI_API_BASE}/models/${GEMINI_MODEL}:streamGenerateContent?alt=sse`, {
         method: 'POST',
         headers: { 'content-type': 'application/json', 'x-goog-api-key': key },
         body: JSON.stringify(body),

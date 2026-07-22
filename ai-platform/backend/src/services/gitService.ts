@@ -12,16 +12,3 @@ const WORKING_DIFF_CMD =
 export async function workingDiff(projectName: string): Promise<string> {
   return execInContainer(CONTAINER_NAME, `cd /workspace/${projectName} && ${WORKING_DIFF_CMD}`);
 }
-
-/** HEAD commit hash — the loop-manager checkpoint before an executor round. */
-export async function currentCommit(projectName: string): Promise<string> {
-  return execInContainer(CONTAINER_NAME, `cd /workspace/${projectName} && git rev-parse HEAD`);
-}
-
-/** Discards everything since `sha`, tracked and untracked — a bad executor round. */
-export async function resetHard(projectName: string, sha: string): Promise<void> {
-  await execInContainer(
-    CONTAINER_NAME,
-    `cd /workspace/${projectName} && git reset --hard ${sha} && git clean -fd`
-  );
-}

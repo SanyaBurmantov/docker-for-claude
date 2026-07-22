@@ -1,0 +1,47 @@
+> docker-for-claude@1.0.0 test
+> npm --prefix ai-platform/backend test
+
+
+> ai-platform-backend@1.0.0 test
+> tsx --test "src/**/*.test.ts"
+
+TAP version 13
+# Subtest: parseSettings falls back to defaults for missing or invalid input
+ok 1 - parseSettings falls back to defaults for missing or invalid input
+  ---
+  duration_ms: 0.813455
+  type: 'test'
+  ...
+# Subtest: parseSettings keeps every valid override
+ok 2 - parseSettings keeps every valid override
+  ---
+  duration_ms: 0.097321
+  type: 'test'
+  ...
+# Subtest: representativeModel maps engine to a priced model
+ok 3 - representativeModel maps engine to a priced model
+  ---
+  duration_ms: 0.134711
+  type: 'test'
+  ...
+# Subtest: estimateCost is deterministic: ~4 chars per token, priced per engine
+ok 4 - estimateCost is deterministic: ~4 chars per token, priced per engine
+  ---
+  duration_ms: 0.098631
+  type: 'test'
+  ...
+# Subtest: estimateCost is free for the free-tier Gemini engine
+ok 5 - estimateCost is free for the free-tier Gemini engine
+  ---
+  duration_ms: 0.06516
+  type: 'test'
+  ...
+1..5
+# tests 5
+# suites 0
+# pass 5
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 291.687696
