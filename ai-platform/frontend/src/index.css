@@ -1966,7 +1966,7 @@ button.nav-link {
   right: 0;
   top: 0;
   bottom: 0;
-  width: 360px;
+  width: 40%;
   z-index: 185;
   display: flex;
   flex-direction: column;
