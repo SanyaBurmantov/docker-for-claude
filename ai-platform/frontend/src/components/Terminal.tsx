@@ -13,6 +13,34 @@ interface TerminalProps {
   visible?: boolean
 }
 
+/** Copy to clipboard. Falls back to a hidden-textarea `execCommand` because
+ *  `navigator.clipboard` is undefined on non-secure origins — e.g. when the IDE
+ *  is opened over http via a LAN IP instead of localhost, which is exactly when
+ *  terminal copy "doesn't work". */
+function copyText(text: string) {
+  if (!text) return
+  if (navigator.clipboard?.writeText) {
+    navigator.clipboard.writeText(text).catch(() => execCopy(text))
+    return
+  }
+  execCopy(text)
+}
+
+function execCopy(text: string) {
+  const ta = document.createElement('textarea')
+  ta.value = text
+  ta.style.position = 'fixed'
+  ta.style.opacity = '0'
+  document.body.appendChild(ta)
+  ta.select()
+  try {
+    document.execCommand('copy')
+  } catch {
+    /* clipboard unreachable — nothing else we can do */
+  }
+  document.body.removeChild(ta)
+}
+
 export default function Terminal({ sessionId, visible = true }: TerminalProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const xtermRef = useRef<XTerm | null>(null)
@@ -77,12 +105,26 @@ export default function Terminal({ sessionId, visible = true }: TerminalProps) {
     searchAddonRef.current = searchAddon
 
     term.attachCustomKeyEventHandler((e) => {
-      if (e.type === 'keydown' && e.ctrlKey && !e.shiftKey && e.key === 'f') {
+      if (e.type !== 'keydown') return true
+      if (e.ctrlKey && !e.shiftKey && e.key === 'f') {
         searchInputRef.current?.focus()
+        return false
+      }
+      // Ctrl+Shift+C/V — the terminal copy/paste convention (plain Ctrl+C is SIGINT).
+      if (e.ctrlKey && e.shiftKey && (e.key === 'C' || e.key === 'c')) {
+        copyText(term.getSelection())
+        return false
+      }
+      if (e.ctrlKey && e.shiftKey && (e.key === 'V' || e.key === 'v')) {
+        navigator.clipboard?.readText?.().then((t) => t && term.paste(t)).catch(() => {})
         return false
       }
       return true
     })
+
+    // Mirror any drag-selection straight into the clipboard so a bare select is
+    // enough to copy; empty selections (a plain click) are ignored by copyText.
+    term.onSelectionChange(() => copyText(term.getSelection()))
 
     term.open(containerRef.current)
     term.onData((data) => {
