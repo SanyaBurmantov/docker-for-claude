@@ -14,6 +14,7 @@ import TerminalComponent from '../components/Terminal'
 import DiffViewer from '../components/DiffViewer'
 import FileExplorer from '../components/FileExplorer'
 import ChecklistPanel, { TASKS_COPY, FIXES_COPY } from '../components/ChecklistPanel'
+import HeadroomPanel from '../components/HeadroomPanel'
 import AutoGrowTextarea from '../components/AutoGrowTextarea'
 import Modal, { ConfirmDialog } from '../components/Modal'
 import { useToast } from '../components/Toast'
@@ -923,6 +924,8 @@ export default function ProjectPage() {
           </div>
         </Modal>
       )}
+
+      <HeadroomPanel active={sessionRunning && runningAgent === 'claude-headroom'} />
     </div>
   )
 }
