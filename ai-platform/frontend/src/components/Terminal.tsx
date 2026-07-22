@@ -4,10 +4,14 @@ import { FitAddon } from 'xterm-addon-fit'
 import { WebLinksAddon } from 'xterm-addon-web-links'
 import { SearchAddon } from 'xterm-addon-search'
 import { useWebSocket } from '../hooks/useWebSocket'
+import { getTmuxBuffer } from '../services/api'
 import 'xterm/css/xterm.css'
 
 interface TerminalProps {
   sessionId: string | null
+  /** Project name — needed to pull the tmux paste buffer (Claude's mouse-mode
+   *  selection lands there, not in xterm's own selection). */
+  projectId?: string
   /** The parent keeps this mounted across tab switches and hides it with CSS; `fit()` needs
    *  a re-run once it's visible again since it can't measure a `display:none` container. */
   visible?: boolean
@@ -44,7 +48,7 @@ function execCopy(text: string) {
   document.body.removeChild(ta)
 }
 
-export default function Terminal({ sessionId, visible = true, toolbarExtra }: TerminalProps) {
+export default function Terminal({ sessionId, projectId, visible = true, toolbarExtra }: TerminalProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const xtermRef = useRef<XTerm | null>(null)
   const fitAddonRef = useRef<FitAddon | null>(null)
@@ -201,6 +205,16 @@ export default function Terminal({ sessionId, visible = true, toolbarExtra }: Te
     localStorage.setItem('terminal-font-size', String(fontSize))
   }, [fontSize])
 
+  async function pullTmuxBuffer() {
+    if (!projectId) return
+    try {
+      const { text } = await getTmuxBuffer(projectId)
+      setClip(text)
+    } catch (err) {
+      setClip(`Не удалось прочитать буфер tmux: ${err}`)
+    }
+  }
+
   function runSearch(backwards: boolean) {
     if (!searchQuery) return
     if (backwards) {
@@ -257,11 +271,20 @@ export default function Terminal({ sessionId, visible = true, toolbarExtra }: Te
       <div className="terminal-clip">
         <textarea
           className="terminal-clip-field"
-          placeholder="Выделенное в терминале появляется здесь — отсюда можно скопировать и вставить в браузере"
+          placeholder="Выделенное в терминале появляется здесь — отсюда можно скопировать и вставить в браузере. В Claude выдели мышью и жми «Из буфера tmux»."
           value={clip}
           onChange={(e) => setClip(e.target.value)}
         />
         <div className="terminal-clip-actions">
+          {projectId && (
+            <button
+              className="btn btn-secondary btn-sm"
+              onClick={pullTmuxBuffer}
+              title="Забрать текст, выделенный мышью в Claude (он попадает в буфер tmux, а не в выделение xterm)"
+            >
+              Из буфера tmux
+            </button>
+          )}
           <button className="btn btn-secondary btn-sm" onClick={() => copyText(clip)} disabled={!clip}>
             Копировать
           </button>

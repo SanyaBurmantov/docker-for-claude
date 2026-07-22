@@ -123,4 +123,17 @@ router.get('/status', async (req: Request<{ id: string }>, res: Response) => {
   }
 });
 
+// Claude runs under tmux with mouse mode on, so a drag-select inside it lands in
+// tmux's own paste buffer, not xterm's selection. Expose the most recent buffer so
+// the UI can pull it out and the user can copy it in the browser. `|| true` keeps
+// the exec at code 0 (empty output) when no buffer has been set yet.
+router.get('/tmux-buffer', async (req: Request<{ id: string }>, res: Response) => {
+  try {
+    const text = await execInContainer(CONTAINER_NAME, 'tmux show-buffer 2>/dev/null || true');
+    res.json({ text });
+  } catch (err) {
+    res.status(500).json({ error: String(err) });
+  }
+});
+
 export default router;

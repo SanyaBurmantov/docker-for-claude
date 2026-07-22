@@ -31,7 +31,7 @@ Claude Container    Browser Container
 | Сервис | Назначение |
 |--------|-----------|
 | `proxy-gateway` | redsocks + iptables, принудительное проксирование + kill switch |
-| `claude-container` | Claude Code CLI + opencode + Node.js 22 + Git |
+| `claude-container` | Claude Code CLI (+ Headroom прокси) + opencode + Node.js 22 + Git |
 | `browser-container` | Firefox + XFCE + noVNC (для OAuth авторизации Claude) |
 | `backend` | Express API + WebSocket терминал + Docker управление |
 | `frontend` | React SPA (Nginx) — дашборд, терминал, diff, файлы, git |
@@ -87,17 +87,32 @@ docker compose up -d
 5. На вкладке **Git** — commit, rollback, переключение веток, pull/push
 6. Когда Claude ждёт ввода или заканчивает работу — придёт уведомление (кнопка 🔔 на Dashboard включает браузерные уведомления; работает через hooks Claude Code)
 
-### Выбор агента: Claude Code или opencode
+### Выбор агента: Claude Code, Claude Code + Headroom или opencode
 
-В контейнере стоят два агента. Пока сессия не запущена, в тулбаре проекта есть выпадающий список — выбор запоминается для каждого проекта отдельно.
+В контейнере стоят три агента. Пока сессия не запущена, в тулбаре проекта есть выпадающий список — выбор запоминается для каждого проекта отдельно.
 
-| | Claude Code | opencode |
-|---|---|---|
-| Модели | Anthropic | много провайдеров (`/models` внутри opencode), включая **Qwen** через DashScope |
-| Авторизация | OAuth через noVNC | `opencode auth login` на вкладке **Shell**, один раз; DashScope — через `DASHSCOPE_API_KEY` в `.env` |
-| Запуск сразу с задачей | да | нет — задача вводится в самом TUI |
+| | Claude Code | Claude Code + Headroom | opencode |
+|---|---|---|---|
+| Модели | Anthropic | Anthropic | много провайдеров (`/models` внутри opencode), включая **Qwen** через DashScope |
+| Авторизация | OAuth через noVNC | та же, что у Claude Code | `opencode auth login` на вкладке **Shell**, один раз; DashScope — через `DASHSCOPE_API_KEY` в `.env` |
+| Запуск сразу с задачей | да | да | нет — задача вводится в самом TUI |
 
-Токены провайдеров opencode лежат в volumes `opencode-data` / `opencode-config` и переживают пересборку. Список агентов backend определяет по `--version` внутри контейнера: если opencode не установлен, выпадающий список не показывается и всё работает как раньше.
+Токены провайдеров opencode лежат в volumes `opencode-data` / `opencode-config` и переживают пересборку. Список агентов backend определяет по `--version` внутри контейнера: если агент не установлен, он не показывается в списке и всё работает как раньше.
+
+### Claude Code + Headroom (сжатие контекста)
+
+Тот же Claude Code, но запущенный за локальным прокси [Headroom](https://github.com/headroomlabs-ai/headroom): он стоит между CLI и `api.anthropic.com` и сжимает объёмный ввод (вывод инструментов, логи, содержимое файлов) до отправки в модель, экономя токены на каждом ходе. По заявлениям — 60–95% на JSON, 15–20% на coding-агентах, без потери точности ответа.
+
+Два способа запуска Claude Code в контейнере:
+
+- **Обычный** — выберите агента **Claude Code** (или в терминале контейнера: `claude`).
+- **Через Headroom** — выберите **Claude Code + Headroom** (или в терминале: `claude-hr`).
+
+`claude-hr` — тонкая обёртка (`claude-container/scripts/claude-hr`): при первом запуске поднимает `headroom proxy` (порт 8787), выставляет `ANTHROPIC_BASE_URL` и передаёт все аргументы в `claude`. Прокси общий на контейнер — последующие сессии переиспользуют уже запущенный. Все флаги Claude (`--resume`, `--session-id`, стартовая задача) работают как обычно.
+
+Установлен базовый пакет `headroom-ai` (без ML-экстры `[all]` с torch/CUDA — они дают гигабайты ради сжатия, которое здесь не используется). Прокси идёт к Anthropic через тот же `HTTPS_PROXY`, что и остальные клиенты контейнера; хоп `claude -> headroom` локальный (`127.0.0.1` в `NO_PROXY`).
+
+Диагностика внутри контейнера: `headroom doctor` (маршрутизация + сэкономлено), `curl -s 127.0.0.1:8787/stats`. Лимит трат: перезапустить прокси как `headroom proxy --budget <USD>`.
 
 ### DashScope / Qwen
 

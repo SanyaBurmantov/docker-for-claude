@@ -6,7 +6,7 @@ import {
   gitCommit, gitBranch, gitCheckout, gitPull, gitPush, gitRollback,
   saveGitCredentials, archiveUrl, streamReview, streamDayLog, generateCommitMessage,
   fetchChecklistFile, saveChecklistFile, TASKS_FILE, FIXES_FILE,
-  fetchAgents, AgentId, AgentInfo,
+  fetchAgents, isAgentId, AgentId, AgentInfo,
   Project, novncUrl, StartSessionOptions,
 } from '../services/api'
 import { parseTasks, serialize, withTasksAdded } from '../services/checklist'
@@ -68,7 +68,7 @@ export default function ProjectPage() {
   const [agents, setAgents] = useState<AgentInfo[]>([])
   const [agent, setAgent] = useState<AgentId>(() => {
     const saved = id ? localStorage.getItem(agentStorageKey(id)) : null
-    return saved === 'claude' || saved === 'opencode' ? saved : DEFAULT_AGENT
+    return isAgentId(saved) ? saved : DEFAULT_AGENT
   })
   /** Which agent the running session was started with — not necessarily the picked one. */
   const [runningAgent, setRunningAgent] = useState<AgentId>(DEFAULT_AGENT)
@@ -145,11 +145,17 @@ export default function ProjectPage() {
         let running = s.running
         if (s.sessionId) setSessionId(s.sessionId)
         if (s.agent) setRunningAgent(s.agent)
-        // "Open with Claude" passes ?start=1 to start the session right away
+        // "Open with Claude" passes ?start=1 to start the session right away;
+        // "Open with Claude HR" adds ?agent=claude-headroom to route it through the
+        // Headroom proxy. An unknown agent value is ignored — the server picks the
+        // stored or default agent.
         if (!running && searchParams.get('start') && !autoStarted.current) {
           autoStarted.current = true
+          const requested = searchParams.get('agent')
+          const startAgent = isAgentId(requested) ? requested : undefined
+          if (startAgent) setAgent(startAgent)
           try {
-            const result = await startSession(id)
+            const result = await startSession(id, startAgent ? { agent: startAgent } : {})
             setSessionId(result.sessionId)
             setRunningAgent(result.agent)
             running = true
@@ -589,6 +595,7 @@ export default function ProjectPage() {
         <div style={{ display: activeTab === 'terminal' ? undefined : 'none' }}>
           <TerminalComponent
             sessionId={sessionId}
+            projectId={id}
             visible={activeTab === 'terminal'}
             toolbarExtra={
               <button
@@ -605,7 +612,7 @@ export default function ProjectPage() {
 
         {id && (
           <div style={{ display: activeTab === 'shell' ? undefined : 'none' }}>
-            <TerminalComponent sessionId={`shell-${id}`} visible={activeTab === 'shell'} />
+            <TerminalComponent sessionId={`shell-${id}`} projectId={id} visible={activeTab === 'shell'} />
           </div>
         )}
 

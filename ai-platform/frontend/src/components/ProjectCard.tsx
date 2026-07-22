@@ -5,11 +5,13 @@ interface ProjectCardProps {
   sessionRunning: boolean
   attention?: 'waiting' | 'done'
   onOpen: () => void
+  /** Same as onOpen, but starts the session behind the Headroom compression proxy. */
+  onOpenHr: () => void
   onDelete: () => void
   onToggleFavorite: () => void
 }
 
-export default function ProjectCard({ project, sessionRunning, attention, onOpen, onDelete, onToggleFavorite }: ProjectCardProps) {
+export default function ProjectCard({ project, sessionRunning, attention, onOpen, onOpenHr, onDelete, onToggleFavorite }: ProjectCardProps) {
   return (
     <div className="project-card">
       <div className="project-card-head">
@@ -51,6 +53,13 @@ export default function ProjectCard({ project, sessionRunning, attention, onOpen
       <div className="project-actions">
         <button className="btn btn-primary btn-sm" onClick={onOpen}>
           Open with Claude
+        </button>
+        <button
+          className="btn btn-secondary btn-sm"
+          onClick={onOpenHr}
+          title="Запустить Claude Code за прокси Headroom (сжатие контекста)"
+        >
+          Open with Claude HR
         </button>
         <button className="btn btn-danger btn-sm" onClick={onDelete}>
           Delete

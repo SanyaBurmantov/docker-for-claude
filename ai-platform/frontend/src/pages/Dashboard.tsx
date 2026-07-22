@@ -138,6 +138,7 @@ export default function Dashboard() {
                     sessionRunning={project.running}
                     attention={attention[project.name]}
                     onOpen={() => navigate(`/project/${project.name}?start=1`)}
+                    onOpenHr={() => navigate(`/project/${project.name}?start=1&agent=claude-headroom`)}
                     onDelete={() => setDeleteTarget(project.name)}
                     onToggleFavorite={() => handleToggleFavorite(project)}
                   />
@@ -154,6 +155,7 @@ export default function Dashboard() {
                 sessionRunning={project.running}
                 attention={attention[project.name]}
                 onOpen={() => navigate(`/project/${project.name}?start=1`)}
+                onOpenHr={() => navigate(`/project/${project.name}?start=1&agent=claude-headroom`)}
                 onDelete={() => setDeleteTarget(project.name)}
                 onToggleFavorite={() => handleToggleFavorite(project)}
               />

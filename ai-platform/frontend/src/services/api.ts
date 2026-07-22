@@ -29,7 +29,13 @@ export interface ClaudeEvent {
   project: string
 }
 
-export type AgentId = 'claude' | 'opencode'
+export type AgentId = 'claude' | 'opencode' | 'claude-headroom'
+
+const AGENT_IDS: readonly AgentId[] = ['claude', 'opencode', 'claude-headroom']
+
+export function isAgentId(value: unknown): value is AgentId {
+  return typeof value === 'string' && (AGENT_IDS as readonly string[]).includes(value)
+}
 
 export interface AgentInfo {
   id: AgentId
@@ -177,6 +183,10 @@ export function stopSession(id: string): Promise<void> {
 
 export function getSessionStatus(id: string): Promise<{ running: boolean; sessionId?: string; agent: AgentId }> {
   return request<{ running: boolean; sessionId?: string; agent: AgentId }>(`/api/projects/${id}/session/status`)
+}
+
+export function getTmuxBuffer(id: string): Promise<{ text: string }> {
+  return request<{ text: string }>(`/api/projects/${id}/session/tmux-buffer`)
 }
 
 export function getGitStatus(id: string): Promise<{ text: string; branch: string }> {

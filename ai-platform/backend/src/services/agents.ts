@@ -44,6 +44,20 @@ export const AGENTS = {
     sessionIdFlag: null,
     resumeFlag: null,
   },
+  // Same Claude Code, launched behind the Headroom compression proxy by the
+  // `claude-hr` wrapper. It forwards every flag to `claude`, so all of Claude's
+  // session flags apply unchanged. Detection is gated on the wrapper existing so
+  // this option only appears in images built with Headroom installed; the version
+  // reported is Claude's own, since the wrapper is just a launcher.
+  'claude-headroom': {
+    bin: 'claude-hr',
+    label: 'Claude Code + Headroom',
+    continueFlag: '--continue',
+    supportsPrompt: true,
+    versionCmd: 'test -x /usr/local/bin/claude-hr && claude --version',
+    sessionIdFlag: '--session-id',
+    resumeFlag: '--resume',
+  },
 } as const satisfies Record<string, AgentSpec>;
 
 export type AgentId = keyof typeof AGENTS;
