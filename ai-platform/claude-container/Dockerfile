@@ -28,32 +28,6 @@ RUN npm install -g @anthropic-ai/claude-code
 # below, both of which are mounted as volumes in docker-compose.
 RUN npm install -g opencode-ai
 
-# Headroom: an optional token-compression proxy that Claude Code can run behind
-# (see the `claude-hr` launcher and the `claude-headroom` agent). Installed with uv
-# into a world-readable location so the `headroom` binary is on the `claude` user's
-# PATH — the build runs as root, but the container runs as `claude`. Only the base
-# package: the proxy needs fastapi/uvicorn/httpx, not the heavy ML extras behind
-# `[all]` (torch/CUDA), which would add gigabytes for compression we do not use.
-# The tool venv is pinned to the system python3 so its interpreter path stays valid
-# for every user, and the uv cache is dropped to keep the layer small.
-ENV UV_TOOL_DIR=/opt/uv/tools
-ENV UV_TOOL_BIN_DIR=/usr/local/bin
-RUN curl -LsSf https://astral.sh/uv/install.sh | env UV_INSTALL_DIR=/usr/local/bin INSTALLER_NO_MODIFY_PATH=1 sh && \
-    uv tool install --python /usr/bin/python3 headroom-ai \
-      --with fastapi --with uvicorn --with 'httpx[http2]' && \
-    chmod -R a+rX /opt/uv && rm -rf /root/.cache/uv
-
-# Output-token reduction: trim what the model writes back (verbosity steering,
-# effort routing) via headroom's proxy. On by default so every claude-hr /
-# headroom proxy invocation cuts output tokens without extra flags.
-ENV HEADROOM_OUTPUT_SHAPER=1
-ENV HEADROOM_VERBOSITY_LEVEL=3
-
-# claude-hr: launches Claude Code behind the Headroom proxy. Kept as a real binary
-# on PATH so the backend agent registry can spawn it exactly like `claude`.
-COPY scripts/claude-hr /usr/local/bin/claude-hr
-RUN chmod +x /usr/local/bin/claude-hr
-
 # /workspace is a bind mount, and a bind mount carries the host's numeric uid/gid
 # straight through: a file written here as uid 0 is root-owned on the host too, and
 # the host user cannot edit it (WebStorm reports "failed to change read-only status").

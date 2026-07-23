@@ -29,9 +29,9 @@ export interface ClaudeEvent {
   project: string
 }
 
-export type AgentId = 'claude' | 'opencode' | 'claude-headroom'
+export type AgentId = 'claude' | 'opencode'
 
-const AGENT_IDS: readonly AgentId[] = ['claude', 'opencode', 'claude-headroom']
+const AGENT_IDS: readonly AgentId[] = ['claude', 'opencode']
 
 export function isAgentId(value: unknown): value is AgentId {
   return typeof value === 'string' && (AGENT_IDS as readonly string[]).includes(value)
@@ -108,20 +108,6 @@ export interface ServerTime {
 
 export function getServerTime(): Promise<ServerTime> {
   return request<ServerTime>('/api/system/time')
-}
-
-export interface HeadroomState {
-  /** The Headroom proxy answered on :8787 at all. */
-  running: boolean
-  /** It answered /stats with parseable JSON — the base package may not serve it. */
-  reachable: boolean
-  /** Raw parsed /stats body; shape is not contracted, so render it defensively. */
-  stats: Record<string, unknown> | null
-}
-
-/** Live compression stats from the container's shared Headroom proxy. */
-export function fetchHeadroom(): Promise<HeadroomState> {
-  return request<HeadroomState>('/api/system/headroom')
 }
 
 export function getProject(id: string): Promise<Project> {

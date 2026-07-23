@@ -65,66 +65,6 @@ router.get('/status', async (_req, res) => {
   }
 });
 
-// Live Headroom proxy stats, read from inside the claude container. The proxy is
-// container-wide (one instance shared by every claude-hr session), so the answer
-// is cached globally rather than per project. `running` = the proxy answered at
-// all; `reachable` = it answered /stats with parseable JSON. The base headroom-ai
-// package may not serve /stats, so the two flags are kept apart: a running proxy
-// with no /stats endpoint is a real, expected state the UI explains rather than
-// treats as an error.
-//
-// One curl, exit forced to 0 so a refused connection resolves instead of throwing:
-// the trailing "HR_CODE:<status>" tells running (000 = nothing listening) from an
-// endpoint that answered.
-const HR_STATS_CMD =
-  "curl -s --max-time 3 -w '\\nHR_CODE:%{http_code}' http://127.0.0.1:8787/stats 2>/dev/null || true";
-
-interface HeadroomState {
-  running: boolean;
-  reachable: boolean;
-  stats: Record<string, unknown> | null;
-}
-
-let hrCache: { value: HeadroomState; ts: number } = {
-  value: { running: false, reachable: false, stats: null },
-  ts: 0,
-};
-
-router.get('/headroom', async (_req, res) => {
-  if (Date.now() - hrCache.ts < 2_000) {
-    res.json(hrCache.value);
-    return;
-  }
-
-  let state: HeadroomState = { running: false, reachable: false, stats: null };
-  try {
-    const out = await execInContainer(CONTAINER_NAME, HR_STATS_CMD);
-    const marker = out.lastIndexOf('HR_CODE:');
-    const code = marker === -1 ? '000' : out.slice(marker + 'HR_CODE:'.length).trim();
-    const body = marker === -1 ? out : out.slice(0, marker).replace(/\n$/, '');
-
-    if (code !== '000') {
-      state.running = true;
-      if (code === '200') {
-        try {
-          const parsed = JSON.parse(body);
-          if (parsed && typeof parsed === 'object') {
-            state.reachable = true;
-            state.stats = parsed as Record<string, unknown>;
-          }
-        } catch {
-          // proxy up but /stats returned non-JSON — reachable stays false
-        }
-      }
-    }
-  } catch {
-    // container down — report the proxy as not running rather than failing the page
-  }
-
-  hrCache = { value: state, ts: Date.now() };
-  res.json(state);
-});
-
 // The header clock reads the platform's wall clock, not the viewer's: the browser
 // may sit in another timezone, or simply be set wrong. The zone travels with the
 // timestamp so the client can render this machine's clock rather than its own.

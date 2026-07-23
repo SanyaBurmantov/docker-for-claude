@@ -14,7 +14,6 @@ import TerminalComponent from '../components/Terminal'
 import DiffViewer from '../components/DiffViewer'
 import FileExplorer from '../components/FileExplorer'
 import ChecklistPanel, { TASKS_COPY, FIXES_COPY } from '../components/ChecklistPanel'
-import HeadroomPanel from '../components/HeadroomPanel'
 import AutoGrowTextarea from '../components/AutoGrowTextarea'
 import Modal, { ConfirmDialog } from '../components/Modal'
 import { useToast } from '../components/Toast'
@@ -146,10 +145,9 @@ export default function ProjectPage() {
         let running = s.running
         if (s.sessionId) setSessionId(s.sessionId)
         if (s.agent) setRunningAgent(s.agent)
-        // "Open with Claude" passes ?start=1 to start the session right away;
-        // "Open with Claude HR" adds ?agent=claude-headroom to route it through the
-        // Headroom proxy. An unknown agent value is ignored — the server picks the
-        // stored or default agent.
+        // "Open with Claude" passes ?start=1 to start the session right away.
+        // An optional ?agent= selects the engine; an unknown value is ignored —
+        // the server picks the stored or default agent.
         if (!running && searchParams.get('start') && !autoStarted.current) {
           autoStarted.current = true
           const requested = searchParams.get('agent')
@@ -924,8 +922,6 @@ export default function ProjectPage() {
           </div>
         </Modal>
       )}
-
-      <HeadroomPanel active={sessionRunning && runningAgent === 'claude-headroom'} />
     </div>
   )
 }
