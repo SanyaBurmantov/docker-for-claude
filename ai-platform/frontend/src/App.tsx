@@ -3,6 +3,7 @@ import Dashboard from './pages/Dashboard'
 import ProjectPage from './pages/ProjectPage'
 import GeminiPanel from './components/GeminiPanel'
 import Clock from './components/Clock'
+import SoundToggle from './components/SoundToggle'
 import SiteFooter from './components/SiteFooter'
 import { novncUrl } from './services/api'
 
@@ -14,6 +15,7 @@ function App() {
         <div className="navbar-links">
           <Link to="/" className="nav-link">Projects</Link>
           <a href={novncUrl()} className="nav-link" target="_blank" rel="noopener noreferrer">noVNC</a>
+          <SoundToggle />
           <Clock />
         </div>
       </nav>

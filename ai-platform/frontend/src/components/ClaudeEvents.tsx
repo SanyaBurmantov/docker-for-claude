@@ -1,17 +1,51 @@
 import { createContext, useContext, useEffect, useRef, useState, ReactNode } from 'react'
 import { ClaudeEvent } from '../services/api'
+import { isSoundEnabled, playChime } from '../services/notify'
 import { useToast } from './Toast'
 
 type AttentionMap = Record<string, 'waiting' | 'done' | undefined>
+
+/** What arrived while the user was looking elsewhere; the title shows the newest. */
+interface Unseen {
+  last: ClaudeEvent
+  count: number
+}
 
 const AttentionContext = createContext<AttentionMap>({})
 
 const RECONNECT_MS = 2000
 
+const BASE_TITLE = 'AI Platform'
+
+function titleFor(unseen: Unseen | null): string {
+  if (!unseen) return BASE_TITLE
+  const mark = unseen.last.type === 'notification' ? '⏳' : '✅'
+  const count = unseen.count > 1 ? `(${unseen.count}) ` : ''
+  return `${mark} ${count}${unseen.last.project} — ${BASE_TITLE}`
+}
+
 export function ClaudeEventsProvider({ children }: { children: ReactNode }) {
   const toast = useToast()
   const [attention, setAttention] = useState<AttentionMap>({})
+  const [unseen, setUnseen] = useState<Unseen | null>(null)
   const lastTsRef = useRef<number>(Number(localStorage.getItem('claude-events-ts')) || Date.now())
+
+  useEffect(() => {
+    document.title = titleFor(unseen)
+  }, [unseen])
+
+  // Coming back to the tab is the acknowledgement, so the title resets itself.
+  useEffect(() => {
+    const clear = () => {
+      if (!document.hidden) setUnseen(null)
+    }
+    window.addEventListener('focus', clear)
+    document.addEventListener('visibilitychange', clear)
+    return () => {
+      window.removeEventListener('focus', clear)
+      document.removeEventListener('visibilitychange', clear)
+    }
+  }, [])
 
   useEffect(() => {
     let closed = false
@@ -24,10 +58,20 @@ export function ClaudeEventsProvider({ children }: { children: ReactNode }) {
           ? `${e.project}: Claude ждёт ввода`
           : `${e.project}: Claude закончил`
       toast('info', msg)
+
+      // Only "waiting for input" rings: the Stop hook fires at the end of every
+      // turn, and a chime that often just teaches the user to mute the platform.
+      if (e.type === 'notification' && isSoundEnabled()) playChime()
+
       if ('Notification' in window && Notification.permission === 'granted' && document.hidden) {
         try {
-          new Notification('AI Platform', { body: msg })
+          new Notification(BASE_TITLE, { body: msg })
         } catch { /* not supported */ }
+      }
+
+      // A focused tab already shows the toast; the title is for what was missed.
+      if (!document.hasFocus()) {
+        setUnseen((prev) => ({ last: e, count: (prev?.count ?? 0) + 1 }))
       }
     }
 
