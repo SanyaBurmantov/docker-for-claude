@@ -15,6 +15,14 @@ RUN curl -L -o /tmp/firefox.tar.xz "https://download.mozilla.org/?product=firefo
     ln -sf /opt/firefox/firefox /usr/bin/firefox && \
     rm /tmp/firefox.tar.xz
 
+# Install Google Chrome stable
+RUN curl -fsSL https://dl.google.com/linux/linux_signing_key.pub | gpg --dearmor -o /usr/share/keyrings/google-chrome.gpg && \
+    printf '%s\n' \
+    'deb [arch=amd64 signed-by=/usr/share/keyrings/google-chrome.gpg] http://dl.google.com/linux/chrome/deb/ stable main' \
+    > /etc/apt/sources.list.d/google-chrome.list && \
+    apt-get update && apt-get install -y google-chrome-stable && \
+    rm -rf /var/lib/apt/lists/*
+
 # noVNC from GitHub
 RUN apt-get update && apt-get install -y python3-pip && \
     git clone --depth 1 https://github.com/novnc/noVNC.git /opt/novnc && \
@@ -46,6 +54,20 @@ RUN mkdir -p /home/claude/Desktop && \
     'Type=Application' \
     'Categories=Network;WebBrowser;' > /home/claude/Desktop/firefox.desktop && \
     chmod +x /home/claude/Desktop/firefox.desktop && \
+    chown -R claude:claude /home/claude/Desktop
+
+# Chrome shortcut on the XFCE desktop.
+RUN mkdir -p /home/claude/Desktop && \
+    printf '%s\n' \
+    '[Desktop Entry]' \
+    'Name=Chrome' \
+    'Comment=Web Browser' \
+    'Exec=google-chrome-stable --no-sandbox' \
+    'Icon=google-chrome' \
+    'Terminal=false' \
+    'Type=Application' \
+    'Categories=Network;WebBrowser;' > /home/claude/Desktop/chrome.desktop && \
+    chmod +x /home/claude/Desktop/chrome.desktop && \
     chown -R claude:claude /home/claude/Desktop
 
 COPY supervisord.conf /etc/supervisor/supervisord.conf
