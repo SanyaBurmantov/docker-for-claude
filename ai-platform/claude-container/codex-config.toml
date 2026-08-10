@@ -1,0 +1,6 @@
+# Default Codex CLI config. The container itself is the sandbox — it holds nothing
+# but /workspace and reaches the network only through the proxy gateway — so Codex's
+# own Landlock sandbox only gets in the way here (it is unavailable in most Docker
+# setups anyway) and every approval prompt would stall an agent nobody is watching.
+approval_policy = "never"
+sandbox_mode = "danger-full-access"

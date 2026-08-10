@@ -1,9 +1,9 @@
 /**
  * Coding agents that can be started in a project's tmux session.
  *
- * Both are interactive CLIs that own the terminal, so the platform only decides
- * which binary to launch — the model is picked inside the agent itself
- * (`/model` in Claude Code, `/models` in opencode).
+ * All of them are interactive CLIs that own the terminal, so the platform only
+ * decides which binary to launch — the model is picked inside the agent itself
+ * (`/model` in Claude Code and Codex, `/models` in opencode).
  */
 export interface AgentSpec {
   bin: string;
@@ -41,6 +41,19 @@ export const AGENTS = {
     // opencode takes the first task through its TUI, not through argv.
     supportsPrompt: false,
     versionCmd: 'opencode --version',
+    sessionIdFlag: null,
+    resumeFlag: null,
+  },
+  codex: {
+    bin: 'codex',
+    label: 'Codex',
+    // Not a flag but a subcommand: `codex resume --last` reopens the most recent
+    // conversation in this directory. It is appended to `bin` exactly like a flag.
+    continueFlag: 'resume --last',
+    supportsPrompt: true,
+    versionCmd: 'codex --version',
+    // Codex names its own sessions (uuid under $CODEX_HOME/sessions) and has no
+    // flag to pin one up front, so the platform cannot record the id it started.
     sessionIdFlag: null,
     resumeFlag: null,
   },

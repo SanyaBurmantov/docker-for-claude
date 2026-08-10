@@ -45,6 +45,8 @@ services:
       - NO_PROXY=localhost,127.0.0.1
       - DASHSCOPE_API_KEY=${DASHSCOPE_API_KEY}
       - DASHSCOPE_MODEL=${DASHSCOPE_MODEL:-qwen-max}
+      # Codex picks this up when no `codex login` has been done in the volume.
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
     volumes:
       - ${PROJECTS_DIR}:/workspace
       - claude-auth:/home/claude/.claude
@@ -52,6 +54,8 @@ services:
       # sessions under the data dir, opencode.json under the config dir.
       - opencode-data:/home/claude/.local/share/opencode
       - opencode-config:/home/claude/.config/opencode
+      # Codex keeps auth.json, config.toml and sessions/ in one directory.
+      - codex-home:/home/claude/.codex
     stdin_open: true
     tty: true
     restart: unless-stopped
@@ -144,6 +148,8 @@ volumes:
   opencode-data:
     driver: local
   opencode-config:
+    driver: local
+  codex-home:
     driver: local
   platform-data:
     driver: local
