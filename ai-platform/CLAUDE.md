@@ -1,6 +1,6 @@
 # ai-platform
 
-Локальная Docker-based Claude Code IDE: веб-интерфейс для работы с проектами через AI-агентов (Claude Code / opencode), изолированных в контейнерах за прокси. Backend (Express+TS) управляет контейнерами, git, терминалом; frontend (React+Vite) — дашборд, терминал, diff, файлы.
+Локальная Docker-based Claude Code IDE: веб-интерфейс для работы с проектами через AI-агентов (Claude Code / opencode / Codex), изолированных в контейнерах за прокси. Backend (Express+TS) управляет контейнерами, git, терминалом; frontend (React+Vite) — дашборд, терминал, diff, файлы.
 
 ## Команды
 
@@ -28,7 +28,7 @@ docker compose -f docker-compose.dev.yml up -d
   - `dockerService.ts` → `execInContainer` / `execInContainerSync`, `tmuxSessionName`, `EXEC_USER_ARGS`, `UTF8_EXEC_ENV`.
   - `metadataService.ts` — персистентность в `/data` (атомарный tmp→rename, сериализованная очередь записей, кеш опережается только после успешной записи). **Образец для любого нового стора.**
   - `sse.ts` → `openSse` (frames `{text|error|done}`).
-  - `agents.ts` — реестр агентов (claude/opencode) для интерактивных tmux-сессий.
+  - `agents.ts` — реестр агентов (claude/opencode/codex) для интерактивных tmux-сессий.
   - `gitService.ts`, `projectService.ts`, `claudeEvents.ts`.
 - `routes/` — тонкие обёртки над сервисами. **`review.ts` и `explain.ts` — эталонные паттерны** одноразового LLM-запроса со стримом в SSE.
 
@@ -51,6 +51,7 @@ docker compose -f docker-compose.dev.yml up -d
 ## Модели / провайдеры
 
 - Claude Code (`claude`) и opencode (`opencode run --format json -m <provider>/<model> --auto`, поддерживает `--session`/`--continue`) — в контейнере, с инструментами.
+- **Codex CLI** (`@openai/codex`) — третий агент в том же контейнере, с инструментами. Интерактивно `codex` / `codex resume --last`, одноразово `codex exec --json`. Свой id сессии назначить нельзя (в отличие от `claude --session-id`), поэтому платформа его не пишет. Состояние и логин — в `$CODEX_HOME=/home/claude/.codex` (том `codex-home`); дефолтный `config.toml` из `claude-container/codex-config.toml` выключает песочницу и аппрувы — песочница здесь сам контейнер. Авторизация: `OPENAI_API_KEY` в `.env` или `docker exec -it ai-claude codex login`.
 - Gemini (`routes/gemini.ts`) — **чистый чат-API без инструментов**; только для текст-в/текст-из ролей. На текущем ключе генерит **только `gemini-3.1-flash-lite`**.
 - **DashScope (Qwen)** — штатный провайдер opencode, настроенный в `claude-container/opencode.json` (`dashscope/qwen-max`). Ключ задаётся через `DASHSCOPE_API_KEY` в `.env`. Доступен в opencode через `/models` (интерактивно) и через `delegate.mjs dashscope` (CLI).
 - Дефолтная модель при новой разработке — самая свежая Claude (Opus 4.8 / Fable 5).
@@ -67,6 +68,7 @@ docker compose -f docker-compose.dev.yml up -d
 node scripts/delegate.mjs <project> deepseek "точное ТЗ"              # opencode → deepseek, с инструментами, в контейнере
 node scripts/delegate.mjs <project> dashscope "точное ТЗ"              # opencode → dashscope/qwen-max
 node scripts/delegate.mjs <project> opencode:<provider/model> - < тз.md   # промпт «-» = stdin, для больших ТЗ
+node scripts/delegate.mjs <project> codex[:<model>] "точное ТЗ"        # codex exec, с инструментами, в контейнере
 node scripts/delegate.mjs <project> gemini "суммаризируй: …"          # текст-в/текст-из, без инструментов, ~бесплатно
 ```
 

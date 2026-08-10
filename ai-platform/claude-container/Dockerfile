@@ -28,6 +28,10 @@ RUN npm install -g @anthropic-ai/claude-code
 # below, both of which are mounted as volumes in docker-compose.
 RUN npm install -g opencode-ai
 
+# Codex CLI (OpenAI): a third coding agent. Auth and sessions live in $CODEX_HOME,
+# mounted as a volume in docker-compose.
+RUN npm install -g @openai/codex
+
 # /workspace is a bind mount, and a bind mount carries the host's numeric uid/gid
 # straight through: a file written here as uid 0 is root-owned on the host too, and
 # the host user cannot edit it (WebStorm reports "failed to change read-only status").
@@ -49,6 +53,11 @@ RUN mkdir -p /home/claude/.config/opencode
 COPY opencode.json /home/claude/.config/opencode/opencode.json
 RUN chown -R ${HOST_UID}:${HOST_GID} /home/claude/.config
 
+# Same trick for Codex: seeds the empty `codex-home` volume on first start.
+RUN mkdir -p /home/claude/.codex
+COPY codex-config.toml /home/claude/.codex/config.toml
+RUN chown -R ${HOST_UID}:${HOST_GID} /home/claude/.codex
+
 COPY scripts/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
@@ -61,5 +70,10 @@ ENV HOME=/home/claude
 # volume puts both files inside it. docker exec inherits this from the image
 # config, so the tmux server started by the backend picks it up too.
 ENV CLAUDE_CONFIG_DIR=/home/claude/.claude
+
+# Codex keeps auth.json, config.toml and its session logs in one directory. It is
+# the default location, but naming it explicitly makes the volume mount obvious
+# and carries into `docker exec`, hence into the tmux server the backend starts.
+ENV CODEX_HOME=/home/claude/.codex
 
 ENTRYPOINT ["/entrypoint.sh"]

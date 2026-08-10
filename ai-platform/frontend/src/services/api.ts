@@ -29,9 +29,9 @@ export interface ClaudeEvent {
   project: string
 }
 
-export type AgentId = 'claude' | 'opencode'
+export type AgentId = 'claude' | 'opencode' | 'codex'
 
-const AGENT_IDS: readonly AgentId[] = ['claude', 'opencode']
+const AGENT_IDS: readonly AgentId[] = ['claude', 'opencode', 'codex']
 
 export function isAgentId(value: unknown): value is AgentId {
   return typeof value === 'string' && (AGENT_IDS as readonly string[]).includes(value)

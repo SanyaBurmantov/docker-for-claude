@@ -31,7 +31,7 @@ Claude Container    Browser Container
 | Сервис | Назначение |
 |--------|-----------|
 | `proxy-gateway` | redsocks + iptables, принудительное проксирование + kill switch |
-| `claude-container` | Claude Code CLI + opencode + Node.js 22 + Git |
+| `claude-container` | Claude Code CLI + opencode + Codex CLI + Node.js 22 + Git |
 | `browser-container` | Firefox + XFCE + noVNC (для OAuth авторизации Claude) |
 | `backend` | Express API + WebSocket терминал + Docker управление |
 | `frontend` | React SPA (Nginx) — дашборд, терминал, diff, файлы, git |
@@ -87,17 +87,18 @@ docker compose up -d
 5. На вкладке **Git** — commit, rollback, переключение веток, pull/push
 6. Когда Claude ждёт ввода или заканчивает работу — придёт уведомление (кнопка 🔔 на Dashboard включает браузерные уведомления; работает через hooks Claude Code)
 
-### Выбор агента: Claude Code или opencode
+### Выбор агента: Claude Code, opencode или Codex
 
-В контейнере стоят два агента. Пока сессия не запущена, в тулбаре проекта есть выпадающий список — выбор запоминается для каждого проекта отдельно.
+В контейнере стоят три агента. Пока сессия не запущена, в тулбаре проекта есть выпадающий список — выбор запоминается для каждого проекта отдельно.
 
-| | Claude Code | opencode |
-|---|---|---|
-| Модели | Anthropic | много провайдеров (`/models` внутри opencode), включая **Qwen** через DashScope |
-| Авторизация | OAuth через noVNC | `opencode auth login` на вкладке **Shell**, один раз; DashScope — через `DASHSCOPE_API_KEY` в `.env` |
-| Запуск сразу с задачей | да | нет — задача вводится в самом TUI |
+| | Claude Code | opencode | Codex |
+|---|---|---|---|
+| Модели | Anthropic | много провайдеров (`/models` внутри opencode), включая **Qwen** через DashScope | OpenAI (`/model` внутри Codex) |
+| Авторизация | OAuth через noVNC | `opencode auth login` на вкладке **Shell**, один раз; DashScope — через `DASHSCOPE_API_KEY` в `.env` | `OPENAI_API_KEY` в `.env` либо `codex login` на вкладке **Shell** |
+| Запуск сразу с задачей | да | нет — задача вводится в самом TUI | да |
+| Resume | по id сессии | `--continue` | `codex resume --last` |
 
-Токены провайдеров opencode лежат в volumes `opencode-data` / `opencode-config` и переживают пересборку. Список агентов backend определяет по `--version` внутри контейнера: если агент не установлен, он не показывается в списке и всё работает как раньше.
+Токены провайдеров opencode лежат в volumes `opencode-data` / `opencode-config`, состояние Codex — в `codex-home`; всё это переживает пересборку. Список агентов backend определяет по `--version` внутри контейнера: если агент не установлен, он не показывается в списке и всё работает как раньше.
 
 ### DashScope / Qwen
 
@@ -177,6 +178,7 @@ docker exec ai-claude nslookup google.com
 | `claude-auth` | Токены авторизации Claude, `.claude.json`, настройки и история сессий |
 | `opencode-data` | Токены провайдеров opencode и история его сессий |
 | `opencode-config` | `opencode.json` |
+| `codex-home` | Логин Codex (`auth.json`), `config.toml` и его сессии |
 | `platform-data` | Избранные проекты, время последнего открытия, выбранный агент |
 | `browser-profile` | Профиль Firefox (cookies, сессии) |
 | `browser-config` | Конфигурация |

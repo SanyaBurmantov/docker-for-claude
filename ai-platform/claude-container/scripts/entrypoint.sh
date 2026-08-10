@@ -2,7 +2,7 @@
 
 # The container starts as root only long enough to fix up the named volumes, then
 # drops to `claude` for good. Docker creates a fresh volume owned by root:root, and
-# claude-auth / opencode-* all mount under /home/claude, so without this the agent
+# claude-auth / opencode-* / codex-home all mount under /home/claude, so without this the agent
 # cannot write its own config. Everything below this block runs unprivileged.
 if [ "$(id -u)" = "0" ]; then
   chown -R claude:claude /home/claude

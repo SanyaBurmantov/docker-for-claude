@@ -4,9 +4,10 @@
 //   node scripts/delegate.mjs <project> hy3 "<промпт|->"
 //   node scripts/delegate.mjs <project> dashscope "<промпт|->"
 //   node scripts/delegate.mjs <project> opencode:<provider/model> "<промпт|->"
+//   node scripts/delegate.mjs <project> codex[:<model>] "<промпт|->"
 //   node scripts/delegate.mjs <project> gemini "<промпт|->" [model]
 //
-// hy3 / dashscope / opencode:* — tool-capable: правит файлы и гоняет Bash внутри контейнера
+// hy3 / dashscope / opencode:* / codex — tool-capable: правят файлы и гоняют Bash внутри контейнера
 // ai-claude, в /workspace/<project>. gemini — чистый текст-в/текст-из через бэкенд
 // платформы (/api/gemini/chat), файлов не видит.
 //
@@ -27,6 +28,7 @@ function usage() {
     '  node scripts/delegate.mjs <project> hy3 "<промпт|->"',
     '  node scripts/delegate.mjs <project> dashscope "<промпт|->"',
     '  node scripts/delegate.mjs <project> opencode:<provider/model> "<промпт|->"',
+    '  node scripts/delegate.mjs <project> codex[:<model>] "<промпт|->"',
     '  node scripts/delegate.mjs <project> gemini "<промпт|->" [model]',
     ].join('\n')
   );
@@ -39,9 +41,9 @@ async function readStdin() {
   return Buffer.concat(chunks).toString('utf-8');
 }
 
-/** Тот же вызов, что runOpencode в backend/src/services/engines.ts, но с обычным
- *  текстовым выводом вместо --format json: потребитель здесь — человек или Claude Code. */
-function runOpencode(project, prompt, model) {
+/** Те же вызовы, что runOpencode/runCodex в backend/src/services/engines.ts, но с
+ *  обычным текстовым выводом вместо json: потребитель здесь — человек или Claude Code. */
+function runAgent(project, bin, args) {
   const child = spawn(
     'docker',
     [
@@ -51,13 +53,13 @@ function runOpencode(project, prompt, model) {
       '-e', 'LC_ALL=C.UTF-8',
       '-w', `/workspace/${project}`,
       CONTAINER,
-      'opencode', 'run', prompt, '-m', model, '--auto',
+      bin, ...args,
     ],
     { stdio: ['ignore', 'inherit', 'inherit'] }
   );
   const timer = setTimeout(() => {
     child.kill('SIGKILL');
-    console.error(`\nopencode не ответил за ${TIMEOUT_MS / 1000}с`);
+    console.error(`\n${bin} не ответил за ${TIMEOUT_MS / 1000}с`);
     process.exitCode = 1;
   }, TIMEOUT_MS);
   child.on('error', (err) => {
@@ -70,6 +72,19 @@ function runOpencode(project, prompt, model) {
     if (process.exitCode === undefined) process.exitCode = code ?? 1;
   });
 }
+
+const runOpencode = (project, prompt, model) =>
+  runAgent(project, 'opencode', ['run', prompt, '-m', model, '--auto']);
+
+// Sandbox off: контейнер сам и есть песочница, а спросить разрешение тут некого.
+const runCodex = (project, prompt, model) =>
+  runAgent(project, 'codex', [
+    'exec',
+    '--skip-git-repo-check',
+    '--dangerously-bypass-approvals-and-sandbox',
+    ...(model ? ['-m', model] : []),
+    prompt,
+  ]);
 
 /** SSE-кадры бэкенда {text|error|done} — тот же формат, что читает consumeTextStream на фронте. */
 async function runGemini(prompt, model) {
@@ -133,4 +148,8 @@ else if (engine === 'hy3') runOpencode(project, prompt, 'opencode/hy3-free');
 else if (engine === 'dashscope') runOpencode(project, prompt, 'dashscope/qwen-max');
 else if (engine.startsWith('opencode:') && engine.length > 'opencode:'.length)
   runOpencode(project, prompt, engine.slice('opencode:'.length));
+// Без «:model» codex берёт модель из своего config.toml.
+else if (engine === 'codex') runCodex(project, prompt, null);
+else if (engine.startsWith('codex:') && engine.length > 'codex:'.length)
+  runCodex(project, prompt, engine.slice('codex:'.length));
 else usage();
