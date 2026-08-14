@@ -24,5 +24,10 @@ ARG HOST_UID=1000
 ARG HOST_GID=1000
 RUN mkdir -p /data && chown ${HOST_UID}:${HOST_GID} /data
 
+# Screenshots sit on a volume of their own rather than inside /data: the agent
+# container mounts the same volume read-only and has no business seeing the rest
+# of /data. Prepared here for the same ownership reason as /data above.
+RUN mkdir -p /data/screenshots && chown ${HOST_UID}:${HOST_GID} /data/screenshots
+
 EXPOSE 3000
 CMD ["node", "dist/index.js"]

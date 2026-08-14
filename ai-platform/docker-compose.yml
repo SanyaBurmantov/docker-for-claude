@@ -56,6 +56,9 @@ services:
       - opencode-config:/home/claude/.config/opencode
       # Codex keeps auth.json, config.toml and sessions/ in one directory.
       - codex-home:/home/claude/.codex
+      # Screenshots the user uploads in the web UI. Read-only: the agent opens them,
+      # the backend is the only writer.
+      - screenshots:/screenshots:ro
     stdin_open: true
     tty: true
     restart: unless-stopped
@@ -99,6 +102,9 @@ services:
       # Favourites, last-opened times and the agent picked per project. Not part
       # of any project, so it must not live in PROJECTS_DIR.
       - platform-data:/data
+      # Same volume the agent container mounts read-only, so a path the UI shows is
+      # a path the agent can open.
+      - screenshots:/data/screenshots
     environment:
       - PORT=3000
       - CLAUDE_CONTAINER=ai-claude
@@ -152,6 +158,8 @@ volumes:
   codex-home:
     driver: local
   platform-data:
+    driver: local
+  screenshots:
     driver: local
   browser-profile:
     driver: local

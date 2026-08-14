@@ -110,6 +110,16 @@ docker compose up -d
 
 Модели по умолчанию: `qwen-max`, `qwen-max-latest`, `qwen-plus`, `qwen-turbo`, `qwen3-coder-plus`. Полный список — в `claude-container/opencode.json`.
 
+### Скриншоты
+
+Вкладка **SHOTS** справа (или Ctrl+Shift+S) — хранилище картинок для агента: макетов, сломанных экранов, кадров из Figma. Класть их в корень проекта больше не нужно.
+
+- **Ctrl+V** — вставить скриншот прямо из буфера обмена; файлы можно и перетащить в панель
+- **→ сессия** — вставляет путь картинки в промпт запущенного агента (без Enter, промпт вокруг него дописывается руками)
+- **путь** — копирует путь в буфер, если задача набирается в модалке «With task…»
+
+Картинки лежат на отдельном volume `screenshots`, а не в проекте: бэкенд пишет в него, контейнер агента видит тот же том read-only как `/screenshots/<проект>/`. Удаление проекта удаляет и его скриншоты. Разрешение на чтение `/screenshots` прописывается в `settings.json` агента при старте контейнера, поэтому Claude не переспрашивает про каждый файл.
+
 ### Git: push/pull
 
 Для HTTPS-remotes сохраните токен один раз: вкладка **Git → 🔑 Credentials** (host / username / token). Токен хранится в volume `claude-auth` внутри контейнера. Клик по коммиту в **Log** показывает его diff.
@@ -180,6 +190,7 @@ docker exec ai-claude nslookup google.com
 | `opencode-config` | `opencode.json` |
 | `codex-home` | Логин Codex (`auth.json`), `config.toml` и его сессии |
 | `platform-data` | Избранные проекты, время последнего открытия, выбранный агент |
+| `screenshots` | Скриншоты для агента (в контейнере агента — `/screenshots`, read-only) |
 | `browser-profile` | Профиль Firefox (cookies, сессии) |
 | `browser-config` | Конфигурация |
 

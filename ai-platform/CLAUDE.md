@@ -29,6 +29,7 @@ docker compose -f docker-compose.dev.yml up -d
   - `metadataService.ts` — персистентность в `/data` (атомарный tmp→rename, сериализованная очередь записей, кеш опережается только после успешной записи). **Образец для любого нового стора.**
   - `sse.ts` → `openSse` (frames `{text|error|done}`).
   - `agents.ts` — реестр агентов (claude/opencode/codex) для интерактивных tmux-сессий.
+  - `screenshotService.ts` — хранилище скриншотов на томе `screenshots`. Бэкенд пишет в `/data/screenshots/<project>/`, агент видит тот же том read-only как `/screenshots/<project>/` — **путь для промпта отдаёт только `agentPathOf`**, руками не собирать.
   - `gitService.ts`, `projectService.ts`, `claudeEvents.ts`.
 - `routes/` — тонкие обёртки над сервисами. **`review.ts` и `explain.ts` — эталонные паттерны** одноразового LLM-запроса со стримом в SSE.
 
@@ -36,6 +37,8 @@ docker compose -f docker-compose.dev.yml up -d
 
 - `services/api.ts` → **`consumeTextStream`** читает SSE `{text|error|done}`. Переиспользовать для любого нового стрима.
 - `components/GeminiPanel.tsx` — slide-out `aside` с табом, hotkey, дропдауном модели, стримом. Скелет для новых панелей.
+- `components/ScreenshotPanel.tsx` — правый drawer (Ctrl+Shift+S): Ctrl+V/drag&drop загружает скриншот, «→ сессия» вставляет его путь в промпт запущенного агента через `tmux paste-buffer`.
+- `services/clipboard.ts` → `copyText` — копирование с фолбэком на `execCommand`: на не-secure origin (http по LAN-IP) `navigator.clipboard` недоступен.
 - `pages/ProjectPage.tsx` — тулбар проекта, diff, файлы.
 
 ## Инварианты (соблюдать)

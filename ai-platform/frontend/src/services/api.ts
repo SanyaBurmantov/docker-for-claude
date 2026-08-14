@@ -407,12 +407,59 @@ export async function streamReview(
 export async function uploadFiles(id: string, dir: string, files: File[]): Promise<void> {
   const fd = new FormData()
   files.forEach((f) => fd.append('files', f))
-  const res = await fetch(`/api/projects/${id}/upload?dir=${encodeURIComponent(dir)}`, {
-    method: 'POST',
-    body: fd,
-  })
+  await postFormData(`/api/projects/${id}/upload?dir=${encodeURIComponent(dir)}`, fd)
+}
+
+/** Multipart cannot go through `request`: it sets its own Content-Type with the
+ *  boundary, and an explicit JSON header would break the parse on the server. */
+async function postFormData<T>(url: string, fd: FormData): Promise<T> {
+  const res = await fetch(url, { method: 'POST', body: fd })
   if (!res.ok) {
     const text = await res.text().catch(() => res.statusText)
     throw new Error(`HTTP ${res.status}: ${text}`)
   }
+  return res.headers.get('content-type')?.includes('application/json')
+    ? res.json()
+    : (undefined as T)
+}
+
+export interface Screenshot {
+  name: string
+  /** Absolute path inside the agent container — what gets pasted into a prompt. */
+  agentPath: string
+  size: number
+  uploadedAt: string
+}
+
+export function fetchScreenshots(id: string): Promise<Screenshot[]> {
+  return request<{ screenshots: Screenshot[] }>(`/api/projects/${id}/screenshots`).then(
+    (r) => r.screenshots
+  )
+}
+
+export function uploadScreenshots(id: string, files: File[]): Promise<Screenshot[]> {
+  const fd = new FormData()
+  files.forEach((f) => fd.append('files', f))
+  return postFormData<{ screenshots: Screenshot[] }>(
+    `/api/projects/${id}/screenshots`,
+    fd
+  ).then((r) => r.screenshots)
+}
+
+export function deleteScreenshot(id: string, name: string): Promise<void> {
+  return request(`/api/projects/${id}/screenshots/${encodeURIComponent(name)}`, {
+    method: 'DELETE',
+  })
+}
+
+/** Types the paths into the running agent's prompt, without submitting. */
+export function attachScreenshots(id: string, names: string[]): Promise<{ paths: string[] }> {
+  return request(`/api/projects/${id}/screenshots/attach`, {
+    method: 'POST',
+    body: JSON.stringify({ names }),
+  })
+}
+
+export function screenshotUrl(id: string, name: string): string {
+  return `/api/projects/${id}/screenshots/${encodeURIComponent(name)}/raw`
 }

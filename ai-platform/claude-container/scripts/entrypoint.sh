@@ -60,6 +60,24 @@ cat > "$SETTINGS" << 'EOF'
 EOF
 fi
 
+# Screenshots live outside /workspace, so reading one is a path Claude Code asks
+# about on every fresh session. Pre-allowing it is what makes "attach a screenshot"
+# a single click in the web UI. Merged rather than seeded with the block above:
+# the settings file survives rebuilds, so an existing install would never get it.
+node -e '
+  const fs = require("fs");
+  const file = process.argv[1];
+  const rule = "Read(/screenshots/**)";
+  let settings = {};
+  try { settings = JSON.parse(fs.readFileSync(file, "utf-8")); } catch {}
+  const permissions = settings.permissions ?? (settings.permissions = {});
+  const allow = permissions.allow ?? (permissions.allow = []);
+  if (!allow.includes(rule)) {
+    allow.push(rule);
+    fs.writeFileSync(file, JSON.stringify(settings, null, 2));
+  }
+' "$SETTINGS" || echo "warning: could not add the /screenshots read permission to $SETTINGS"
+
 echo "Claude Code container ready"
 echo "Projects are in /workspace"
 echo "Run: claude"

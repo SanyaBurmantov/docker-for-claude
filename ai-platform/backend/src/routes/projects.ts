@@ -7,6 +7,7 @@ import multer from 'multer';
 import { scanProjects, getProjectInfo, listFilesRecursive, readProjectFile, writeProjectFile, isValidProjectName, isPathSafe } from '../services/projectService';
 import { execInContainer, tmuxSessionName } from '../services/dockerService';
 import { getAll, metaFor, remove as removeMeta, update as updateMeta } from '../services/metadataService';
+import { removeAll as removeScreenshots } from '../services/screenshotService';
 
 const router = Router();
 
@@ -103,6 +104,7 @@ router.delete('/:id', async (req: Request<{ id: string }>, res: Response) => {
     await fs.rm(projectPath, { recursive: true, force: true });
     // Otherwise a project recreated under the same name inherits the old pin
     await removeMeta(req.params.id).catch(() => {});
+    await removeScreenshots(req.params.id);
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: String(err) });
