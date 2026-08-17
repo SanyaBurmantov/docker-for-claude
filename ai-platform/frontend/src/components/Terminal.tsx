@@ -8,6 +8,17 @@ import { getTmuxBuffer } from '../services/api'
 import { copyText } from '../services/clipboard'
 import 'xterm/css/xterm.css'
 
+/** Подсветка всех совпадений + отметки на overview ruler; цвета — из темы терминала ниже. */
+const SEARCH_OPTIONS = {
+  decorations: {
+    matchBackground: '#1d4a63',
+    matchOverviewRuler: '#00f0ff',
+    activeMatchBackground: '#00f0ff',
+    activeMatchBorder: '#7ff8ff',
+    activeMatchColorOverviewRuler: '#ff2ec4',
+  },
+}
+
 interface TerminalProps {
   sessionId: string | null
   /** Project name — needed to pull the tmux paste buffer (Claude's mouse-mode
@@ -28,6 +39,11 @@ export default function Terminal({ sessionId, projectId, visible = true, toolbar
   const searchAddonRef = useRef<SearchAddon | null>(null)
   const searchInputRef = useRef<HTMLInputElement>(null)
   const [searchQuery, setSearchQuery] = useState('')
+  // «3 / 17» рядом с полем поиска; resultIndex === -1 — совпадений больше highlightLimit
+  const [searchResults, setSearchResults] = useState({ index: -1, count: 0 })
+  const [fullscreen, setFullscreen] = useState(false)
+  // Прокручен ли вид в самый низ — от этого зависит плавающая кнопка «вниз»
+  const [atBottom, setAtBottom] = useState(true)
   // Clipboard bridge: on a non-secure origin (http via LAN IP) the browser blocks
   // the clipboard API, so terminal copy can't reach the OS buffer. Selected text
   // is mirrored here instead — a real textarea the user can copy from natively.
@@ -87,6 +103,18 @@ export default function Terminal({ sessionId, projectId, visible = true, toolbar
     const searchAddon = new SearchAddon()
     term.loadAddon(searchAddon)
     searchAddonRef.current = searchAddon
+
+    searchAddon.onDidChangeResults(({ resultIndex, resultCount }) =>
+      setSearchResults({ index: resultIndex, count: resultCount })
+    )
+
+    const syncAtBottom = () => {
+      const buf = term.buffer.active
+      setAtBottom(buf.viewportY >= buf.baseY)
+    }
+    term.onScroll(syncAtBottom)
+    // Новый вывод не двигает вид, если пользователь ушёл вверх, — состояние надо пересчитать
+    term.onWriteParsed(syncAtBottom)
 
     term.attachCustomKeyEventHandler((e) => {
       if (e.type !== 'keydown') return true
@@ -170,6 +198,13 @@ export default function Terminal({ sessionId, projectId, visible = true, toolbar
     if (term) sendResizeRef.current(term.cols, term.rows)
   }, [visible])
 
+  // Смена размера контейнера — CSS уже применён к моменту эффекта, можно мерить
+  useEffect(() => {
+    fitAddonRef.current?.fit()
+    const term = xtermRef.current
+    if (term) sendResizeRef.current(term.cols, term.rows)
+  }, [fullscreen])
+
   useEffect(() => {
     const term = xtermRef.current
     if (!term) return
@@ -191,14 +226,28 @@ export default function Terminal({ sessionId, projectId, visible = true, toolbar
   function runSearch(backwards: boolean) {
     if (!searchQuery) return
     if (backwards) {
-      searchAddonRef.current?.findPrevious(searchQuery)
+      searchAddonRef.current?.findPrevious(searchQuery, SEARCH_OPTIONS)
     } else {
-      searchAddonRef.current?.findNext(searchQuery)
+      searchAddonRef.current?.findNext(searchQuery, SEARCH_OPTIONS)
     }
   }
 
+  /** Весь scrollback текстом — выделить мышью 10000 строк нереально. */
+  function dumpBuffer() {
+    const term = xtermRef.current
+    if (!term) return
+    const buf = term.buffer.active
+    const lines: string[] = []
+    for (let i = 0; i < buf.length; i++) {
+      lines.push(buf.getLine(i)?.translateToString(true) ?? '')
+    }
+    // Хвост из пустых строк ниже курсора только мешает
+    while (lines.length && !lines[lines.length - 1]) lines.pop()
+    setClip(lines.join('\n'))
+  }
+
   return (
-    <div>
+    <div className={fullscreen ? 'terminal-wrap terminal-wrap-fullscreen' : 'terminal-wrap'}>
       <div className="terminal-toolbar">
         {toolbarExtra}
         <div className="terminal-font-controls">
@@ -217,27 +266,72 @@ export default function Terminal({ sessionId, projectId, visible = true, toolbar
             A＋
           </button>
         </div>
-        <input
-          ref={searchInputRef}
-          type="text"
-          className="terminal-search"
-          placeholder="Search output (Ctrl+F)…  Enter — next, Shift+Enter — prev"
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') runSearch(e.shiftKey)
-            if (e.key === 'Escape') {
-              setSearchQuery('')
-              xtermRef.current?.focus()
-            }
-          }}
-        />
+        <div className="terminal-scroll-controls">
+          <button
+            className="icon-btn"
+            title="В начало вывода"
+            onClick={() => xtermRef.current?.scrollToTop()}
+          >
+            ↑
+          </button>
+          <button
+            className="icon-btn"
+            title="В конец вывода"
+            onClick={() => xtermRef.current?.scrollToBottom()}
+          >
+            ↓
+          </button>
+          <button
+            className="icon-btn"
+            title={fullscreen ? 'Свернуть терминал' : 'Терминал на весь экран'}
+            onClick={() => setFullscreen((f) => !f)}
+          >
+            {fullscreen ? '⤡' : '⤢'}
+          </button>
+        </div>
+        <div className="terminal-search-box">
+          <input
+            ref={searchInputRef}
+            type="text"
+            className="terminal-search"
+            placeholder="Search output (Ctrl+F)…  Enter — next, Shift+Enter — prev"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') runSearch(e.shiftKey)
+              if (e.key === 'Escape') {
+                setSearchQuery('')
+                searchAddonRef.current?.clearDecorations()
+                setSearchResults({ index: -1, count: 0 })
+                xtermRef.current?.focus()
+              }
+            }}
+          />
+          {searchQuery && (
+            <span className="terminal-search-count">
+              {searchResults.count === 0
+                ? 'нет'
+                : searchResults.index < 0
+                  ? `>${searchResults.count}`
+                  : `${searchResults.index + 1} / ${searchResults.count}`}
+            </span>
+          )}
+        </div>
       </div>
       <div className="terminal-container" ref={containerRef}>
         {!sessionId && (
           <div className="terminal-placeholder">
             Session not started
           </div>
+        )}
+        {!atBottom && (
+          <button
+            className="terminal-jump-bottom"
+            title="К последнему выводу"
+            onClick={() => xtermRef.current?.scrollToBottom()}
+          >
+            ↓ вниз
+          </button>
         )}
       </div>
 
@@ -258,6 +352,13 @@ export default function Terminal({ sessionId, projectId, visible = true, toolbar
               Из буфера tmux
             </button>
           )}
+          <button
+            className="btn btn-secondary btn-sm"
+            onClick={dumpBuffer}
+            title="Переложить сюда весь вывод терминала, включая прокрученный"
+          >
+            Весь вывод
+          </button>
           <button className="btn btn-secondary btn-sm" onClick={() => copyText(clip)} disabled={!clip}>
             Копировать
           </button>

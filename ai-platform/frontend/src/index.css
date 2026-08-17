@@ -686,7 +686,70 @@ button.nav-link {
 .terminal-font-controls {
   display: flex;
   gap: 4px;
+}
+
+/* Font + scroll groups sit at the left of the toolbar, search at the right */
+.terminal-scroll-controls {
+  display: flex;
+  gap: 4px;
   margin-right: auto;
+}
+
+/* Fullscreen: терминал занимает всё окно, тулбар и буфер обмена остаются на месте */
+.terminal-wrap-fullscreen {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  padding: 12px;
+  background: var(--bg-0);
+}
+
+.terminal-wrap-fullscreen .terminal-container,
+.terminal-wrap-fullscreen .terminal-placeholder {
+  flex: 1;
+  height: auto;
+}
+
+.terminal-jump-bottom {
+  position: absolute;
+  right: 16px;
+  bottom: 12px;
+  padding: 6px 12px;
+  background: var(--bg-1);
+  border: 1px solid var(--cyan);
+  color: var(--cyan);
+  font-size: 0.72rem;
+  font-family: var(--font-mono);
+  letter-spacing: 1px;
+  cursor: pointer;
+  clip-path: var(--cut-sm);
+  box-shadow: var(--glow-cyan);
+}
+
+.terminal-jump-bottom:hover {
+  background: var(--bg-2);
+}
+
+.terminal-search-box {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+/* Место под счётчик совпадений внутри поля */
+.terminal-search-box .terminal-search {
+  padding-right: 58px;
+}
+
+.terminal-search-count {
+  position: absolute;
+  right: 10px;
+  color: var(--text-faint);
+  font-size: 0.7rem;
+  font-family: var(--font-mono);
+  pointer-events: none;
 }
 
 .terminal-search {
