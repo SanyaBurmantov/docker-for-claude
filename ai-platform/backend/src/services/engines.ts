@@ -15,13 +15,17 @@ export type Role = 'manager' | 'analyst' | 'executor' | 'tester' | 'reviewer';
  * branch on engine — only `runEngine` does.
  */
 export interface EngineQuery {
-  project: string;
+  /** Project to run in; omitted for chat with no project context (cwd stays `/workspace`). */
+  project?: string;
   prompt: string;
   systemPrompt: string;
   engine: ExecutorRef;
-  role: Role;
+  /** Loop role, for callers that have one; `runEngine` itself does not branch on it. */
+  role?: Role;
   allowedTools?: string;
   disallowedTools?: string;
+  /** Codex only: run it with a read-only sandbox instead of the default full access. */
+  readOnly?: boolean;
   sessionId?: string | null;
   /** True once `sessionId` already names a conversation this loop started earlier. */
   resumeSession?: boolean;
@@ -91,7 +95,7 @@ function runContainerCli(bin: string, args: string[], q: EngineQuery, h: EngineH
     'exec',
     ...EXEC_USER_ARGS,
     '-w',
-    `/workspace/${q.project}`,
+    q.project ? `/workspace/${q.project}` : '/workspace',
     ...UTF8_EXEC_ENV,
     CONTAINER_NAME,
     bin,
@@ -149,9 +153,11 @@ function runOpencode(q: EngineQuery, h: EngineHandlers): () => void {
 
 /**
  * Codex has no system-prompt flag either, so the prompt is merged the same way.
- * Sandbox off: the container already is the sandbox (see `codex-config.toml`), and
- * a one-shot query has nobody to answer an approval prompt.
+ * Sandbox off by default: the container already is the sandbox (see `codex-config.toml`),
+ * and a one-shot query has nobody to answer an approval prompt. Chat asks for
+ * `readOnly` instead — it only talks about the code, so it has no business editing it.
  * `q.sessionId` is ignored — codex names its own sessions and cannot be told an id.
+ * An empty model means "whatever `config.toml` says".
  */
 function runCodex(q: EngineQuery, h: EngineHandlers): () => void {
   const fullPrompt = q.systemPrompt ? `${q.systemPrompt}\n\n${q.prompt}` : q.prompt;
@@ -159,9 +165,8 @@ function runCodex(q: EngineQuery, h: EngineHandlers): () => void {
     'exec',
     '--json',
     '--skip-git-repo-check',
-    '-m',
-    q.engine.model,
-    '--dangerously-bypass-approvals-and-sandbox',
+    ...(q.engine.model ? ['-m', q.engine.model] : []),
+    ...(q.readOnly ? ['-a', 'never', '-s', 'read-only'] : ['--dangerously-bypass-approvals-and-sandbox']),
     fullPrompt,
   ];
   return runContainerCli('codex', args, q, h);

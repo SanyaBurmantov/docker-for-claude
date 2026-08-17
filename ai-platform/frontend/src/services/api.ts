@@ -358,6 +358,46 @@ export async function streamGeminiChat(
   await consumeTextStream(res, onText)
 }
 
+export interface ChatStatus {
+  model: string
+  models: string[]
+}
+
+export type ChatEngine = 'claude' | 'codex'
+
+/** Global chat has no project; the project one runs in that project's directory. */
+function chatBase(projectId?: string): string {
+  return projectId ? `/api/projects/${projectId}/chat` : '/api/claude/chat'
+}
+
+export function fetchChatStatus(projectId?: string): Promise<ChatStatus> {
+  return request<ChatStatus>(`${chatBase(projectId)}/status`)
+}
+
+export interface ChatRequest {
+  messages: GeminiMessage[]
+  engine: ChatEngine
+  model: string
+  /** Claude keeps the history in this session; codex ignores it and re-reads the transcript. */
+  sessionId: string
+  resume: boolean
+}
+
+export async function streamChat(
+  projectId: string | undefined,
+  body: ChatRequest,
+  onText: (chunk: string) => void,
+  signal?: AbortSignal
+): Promise<void> {
+  const res = await fetch(chatBase(projectId), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+    signal,
+  })
+  await consumeTextStream(res, onText)
+}
+
 /** Streams a 2-4 line summary of this project's commits made today. */
 export async function streamDayLog(id: string, onText: (chunk: string) => void, signal?: AbortSignal): Promise<void> {
   const res = await fetch(`/api/projects/${id}/git/daylog`, { signal })
@@ -421,6 +461,23 @@ async function postFormData<T>(url: string, fd: FormData): Promise<T> {
   return res.headers.get('content-type')?.includes('application/json')
     ? res.json()
     : (undefined as T)
+}
+
+/** Sends a recording to the backend's speech-to-text and returns what was said. */
+export async function transcribeAudio(blob: Blob): Promise<string> {
+  const fd = new FormData()
+  // The extension is cosmetic — the server goes by the mime type the recorder set.
+  fd.append('audio', blob, 'voice.webm')
+  const { text } = await postFormData<{ text: string }>('/api/voice/transcribe', fd)
+  return text.trim()
+}
+
+/** Types text into the running agent's pane, without submitting it. */
+export function pasteIntoSession(id: string, text: string): Promise<void> {
+  return request(`/api/projects/${id}/session/paste`, {
+    method: 'POST',
+    body: JSON.stringify({ text }),
+  })
 }
 
 export interface Screenshot {

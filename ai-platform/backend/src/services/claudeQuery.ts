@@ -10,7 +10,8 @@ export const NO_TOOLS = 'Read Grep Glob Bash Edit Write WebFetch WebSearch Task'
 export const WRITE_TOOLS = 'Read Grep Glob Edit Write Bash';
 
 export interface ClaudeQuery {
-  projectName: string;
+  /** Project to run in; omitted for chat that has no project context (cwd stays `/workspace`). */
+  projectName?: string;
   prompt: string;
   systemPrompt: string;
   model: string;
@@ -61,7 +62,7 @@ export function streamClaude(query: ClaudeQuery, handlers: ClaudeHandlers): () =
     '-i',
     ...EXEC_USER_ARGS,
     '-w',
-    `/workspace/${query.projectName}`,
+    query.projectName ? `/workspace/${query.projectName}` : '/workspace',
     ...UTF8_EXEC_ENV,
     CONTAINER_NAME,
     'claude',

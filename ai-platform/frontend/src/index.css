@@ -1697,9 +1697,17 @@ button.nav-link {
   }
 }
 
-/* ============ GEMINI PANEL (left drawer) ============ */
+/* ============ CHAT DRAWERS (left) — Gemini, Claude, project chat ============ */
 
-.gemini-tab {
+/* One drawer per assistant: same shell, own accent and own slot on the left edge. */
+.chat-tab-gemini, .chat-panel-gemini { --chat-accent: var(--magenta); --chat-glow: var(--glow-magenta); }
+.chat-tab-claude, .chat-panel-claude { --chat-accent: var(--cyan); --chat-glow: var(--glow-cyan); }
+.chat-tab-project, .chat-panel-project { --chat-accent: var(--brass); --chat-glow: var(--glow-brass); }
+
+.chat-tab-claude { top: calc(50% - 104px); }
+.chat-tab-project { top: calc(50% + 104px); }
+
+.chat-tab {
   position: fixed;
   left: 0;
   top: 50%;
@@ -1709,20 +1717,20 @@ button.nav-link {
   background: rgba(9, 12, 24, 0.9);
   border: 1px solid var(--line-strong);
   border-left: none;
-  color: var(--magenta);
+  color: var(--chat-accent);
   cursor: pointer;
   transition: left 0.25s cubic-bezier(0.2, 0.9, 0.3, 1), color 0.15s, box-shadow 0.15s;
 }
 
-.gemini-tab:hover {
-  box-shadow: var(--glow-magenta);
+.chat-tab:hover {
+  box-shadow: var(--chat-glow);
 }
 
-.gemini-tab-open {
+.chat-tab-open {
   left: 380px;
 }
 
-.gemini-tab-label {
+.chat-tab-label {
   display: block;
   writing-mode: vertical-rl;
   font-family: var(--font-display);
@@ -1731,7 +1739,7 @@ button.nav-link {
   letter-spacing: 3px;
 }
 
-.gemini-scrim {
+.chat-scrim {
   position: fixed;
   inset: 0;
   z-index: 180;
@@ -1739,7 +1747,7 @@ button.nav-link {
   backdrop-filter: blur(2px);
 }
 
-.gemini-panel {
+.chat-panel {
   position: fixed;
   left: 0;
   top: 0;
@@ -1754,12 +1762,12 @@ button.nav-link {
   transition: transform 0.25s cubic-bezier(0.2, 0.9, 0.3, 1);
 }
 
-.gemini-panel-open {
+.chat-panel-open {
   transform: translateX(0);
-  box-shadow: 6px 0 40px rgba(0, 0, 0, 0.6), 0 0 24px rgba(255, 46, 196, 0.1);
+  box-shadow: 6px 0 40px rgba(0, 0, 0, 0.6), var(--chat-glow);
 }
 
-.gemini-header {
+.chat-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -1768,20 +1776,47 @@ button.nav-link {
   border-bottom: 1px solid var(--line);
 }
 
-.gemini-header h3 {
+.chat-header h3 {
   font-family: var(--font-display);
   font-size: 0.85rem;
   letter-spacing: 2px;
-  color: var(--magenta);
+  color: var(--chat-accent);
 }
 
-.gemini-header-actions {
+.chat-header-actions {
   display: flex;
   align-items: center;
   gap: 6px;
 }
 
-.gemini-model {
+.chat-engines {
+  display: flex;
+}
+
+.chat-engine {
+  padding: 3px 7px;
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  color: var(--text-faint);
+  background: var(--bg-3);
+  border: 1px solid var(--line);
+  cursor: pointer;
+}
+
+.chat-engine + .chat-engine {
+  border-left: none;
+}
+
+.chat-engine-on {
+  color: var(--chat-accent);
+  border-color: var(--chat-accent);
+}
+
+.chat-engine:disabled {
+  cursor: default;
+}
+
+.chat-model {
   padding: 4px 6px;
   max-width: 150px;
   font-family: var(--font-mono);
@@ -1792,7 +1827,7 @@ button.nav-link {
   cursor: pointer;
 }
 
-.gemini-icon-btn {
+.chat-icon-btn {
   padding: 2px 7px;
   font-size: 1rem;
   line-height: 1;
@@ -1803,17 +1838,17 @@ button.nav-link {
   transition: color 0.15s, border-color 0.15s;
 }
 
-.gemini-icon-btn:hover:not(:disabled) {
+.chat-icon-btn:hover:not(:disabled) {
   color: var(--cyan);
   border-color: var(--line);
 }
 
-.gemini-icon-btn:disabled {
+.chat-icon-btn:disabled {
   opacity: 0.3;
   cursor: default;
 }
 
-.gemini-warning {
+.chat-warning {
   padding: 9px 16px;
   font-size: 0.75rem;
   color: var(--brass);
@@ -1821,7 +1856,7 @@ button.nav-link {
   border-bottom: 1px solid rgba(232, 176, 75, 0.25);
 }
 
-.gemini-messages {
+.chat-messages {
   flex: 1;
   overflow-y: auto;
   padding: 16px;
@@ -1830,14 +1865,14 @@ button.nav-link {
   gap: 12px;
 }
 
-.gemini-empty {
+.chat-empty {
   margin: auto 0;
   text-align: center;
   font-size: 0.8rem;
   color: var(--text-faint);
 }
 
-.gemini-msg {
+.chat-msg {
   padding: 9px 12px;
   font-size: 0.82rem;
   line-height: 1.55;
@@ -1846,20 +1881,20 @@ button.nav-link {
   clip-path: var(--cut-sm);
 }
 
-.gemini-msg-user {
+.chat-msg-user {
   align-self: flex-end;
   max-width: 85%;
   color: #06101f;
   background: var(--cyan-dim);
 }
 
-.gemini-msg-model {
+.chat-msg-model {
   color: var(--text);
   background: var(--bg-3);
-  border-left: 2px solid var(--magenta);
+  border-left: 2px solid var(--chat-accent);
 }
 
-.gemini-msg-error {
+.chat-msg-error {
   color: var(--red);
   background: rgba(255, 59, 92, 0.08);
   border-left-color: var(--red);
@@ -1867,21 +1902,63 @@ button.nav-link {
   font-size: 0.74rem;
 }
 
-.gemini-caret {
+.chat-caret {
   display: inline-block;
   width: 7px;
   height: 1em;
   margin-left: 2px;
   vertical-align: text-bottom;
-  background: var(--magenta);
-  animation: gemini-blink 1s step-end infinite;
+  background: var(--chat-accent);
+  animation: chat-blink 1s step-end infinite;
 }
 
-@keyframes gemini-blink {
+@keyframes chat-blink {
   50% { opacity: 0; }
 }
 
-.gemini-composer {
+.chat-composer-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+/* Sits next to Send in the panels and next to the inputs on the project page,
+   so it keeps its own size instead of stretching with a flex row. */
+.mic-btn {
+  flex: none;
+  padding: 4px 8px;
+  font-size: 0.85rem;
+  line-height: 1.2;
+  color: var(--text-dim);
+  background: var(--bg-3);
+  border: 1px solid var(--line);
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s, box-shadow 0.15s;
+}
+
+.mic-btn:hover:not(:disabled) {
+  color: var(--cyan);
+  border-color: var(--cyan);
+}
+
+.mic-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.mic-btn-live {
+  color: var(--red);
+  border-color: var(--red);
+  box-shadow: 0 0 12px rgba(255, 59, 92, 0.35);
+  animation: mic-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes mic-pulse {
+  50% { opacity: 0.55; }
+}
+
+.chat-composer {
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -1889,7 +1966,7 @@ button.nav-link {
   border-top: 1px solid var(--line);
 }
 
-.gemini-input {
+.chat-input {
   width: 100%;
   padding: 9px 11px;
   font-family: var(--font-ui);
@@ -1900,19 +1977,19 @@ button.nav-link {
   resize: vertical;
 }
 
-.gemini-input:focus {
+.chat-input:focus {
   outline: none;
-  border-color: var(--magenta);
-  box-shadow: var(--glow-magenta);
+  border-color: var(--chat-accent);
+  box-shadow: var(--chat-glow);
 }
 
-.gemini-composer .btn {
+.chat-composer .btn {
   align-self: flex-end;
 }
 
 @media (max-width: 640px) {
-  .gemini-panel { width: 100%; }
-  .gemini-tab-open { left: auto; right: 0; border-right: none; border-left: 1px solid var(--line-strong); }
+  .chat-panel { width: 100%; }
+  .chat-tab-open { left: auto; right: 0; border-right: none; border-left: 1px solid var(--line-strong); }
 }
 
 /* ============ SITE FOOTER (repo + donate) ============ */

@@ -1,19 +1,31 @@
 import { useEffect, useRef, useState } from 'react'
 import MicButton from './MicButton'
 import {
-  fetchGeminiStatus,
-  streamGeminiChat,
+  fetchChatStatus,
+  streamChat,
+  ChatEngine,
+  ChatStatus,
   GeminiMessage,
-  GeminiStatus,
 } from '../services/api'
 
 interface ChatEntry extends GeminiMessage {
   error?: boolean
 }
 
-export default function GeminiPanel() {
+interface Props {
+  /** Given: the chat runs inside that project and may read its files. Omitted: plain talk, no tools. */
+  projectId?: string
+}
+
+/**
+ * Chat drawer for the container agents — Claude (`claude -p`) and GPT (`codex exec`).
+ * Same shell as `GeminiPanel`, but the history lives in a Claude session
+ * (`sessionId` + `resume`) instead of being resent, so long conversations stay cheap.
+ */
+export default function ChatPanel({ projectId }: Props) {
   const [open, setOpen] = useState(false)
-  const [status, setStatus] = useState<GeminiStatus | null>(null)
+  const [status, setStatus] = useState<ChatStatus | null>(null)
+  const [engine, setEngine] = useState<ChatEngine>('claude')
   const [model, setModel] = useState('')
   const [entries, setEntries] = useState<ChatEntry[]>([])
   const [input, setInput] = useState('')
@@ -22,15 +34,24 @@ export default function GeminiPanel() {
   const abortRef = useRef<AbortController | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
+  // Names the Claude conversation; a fresh id starts a fresh one.
+  const sessionRef = useRef(crypto.randomUUID())
+  const startedRef = useRef(false)
+
+  // Ctrl+Shift+K for the global chat, Ctrl+Shift+J for the project one — both
+  // reachable while the terminal has focus.
+  const hotkey = projectId ? 'j' : 'k'
+  const variant = projectId ? 'project' : 'claude'
+  const label = projectId ? 'ПРОЕКТ' : 'CLAUDE'
 
   useEffect(() => {
-    fetchGeminiStatus()
+    fetchChatStatus(projectId)
       .then((s) => {
         setStatus(s)
         setModel(s.model)
       })
       .catch(() => setStatus(null))
-  }, [])
+  }, [projectId])
 
   useEffect(() => {
     if (open) inputRef.current?.focus()
@@ -43,17 +64,29 @@ export default function GeminiPanel() {
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (e.key === 'Escape' && open) setOpen(false)
-      // Ctrl+Shift+G toggles from anywhere, including inside the terminal
-      if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'g') {
+      if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === hotkey) {
         e.preventDefault()
         setOpen((v) => !v)
       }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [open])
+  }, [open, hotkey])
 
   useEffect(() => () => abortRef.current?.abort(), [])
+
+  function reset() {
+    setEntries([])
+    sessionRef.current = crypto.randomUUID()
+    startedRef.current = false
+  }
+
+  function switchEngine(next: ChatEngine) {
+    if (next === engine || streaming) return
+    setEngine(next)
+    // The two CLIs cannot read each other's history, so the thread starts over.
+    reset()
+  }
 
   async function send() {
     const text = input.trim()
@@ -68,9 +101,15 @@ export default function GeminiPanel() {
     abortRef.current = controller
 
     try {
-      await streamGeminiChat(
-        history.map(({ role, text }) => ({ role, text })),
-        model,
+      await streamChat(
+        projectId,
+        {
+          messages: history.map(({ role, text }) => ({ role, text })),
+          engine,
+          model,
+          sessionId: sessionRef.current,
+          resume: startedRef.current,
+        },
         (chunk) => {
           setEntries((prev) => {
             const next = [...prev]
@@ -81,6 +120,8 @@ export default function GeminiPanel() {
         },
         controller.signal
       )
+      // Only a turn that finished left a session on disk to resume.
+      startedRef.current = true
     } catch (err) {
       if (controller.signal.aborted) return
       setEntries((prev) => {
@@ -109,37 +150,51 @@ export default function GeminiPanel() {
   return (
     <>
       <button
-        className={`chat-tab chat-tab-gemini ${open ? 'chat-tab-open' : ''}`}
+        className={`chat-tab chat-tab-${variant} ${open ? 'chat-tab-open' : ''}`}
         onClick={() => setOpen((v) => !v)}
-        title="Gemini (Ctrl+Shift+G)"
-        aria-label="Toggle Gemini panel"
+        title={`${label} (Ctrl+Shift+${hotkey.toUpperCase()})`}
+        aria-label={`Toggle ${label} chat panel`}
       >
-        <span className="chat-tab-label">GEMINI</span>
+        <span className="chat-tab-label">{label}</span>
       </button>
 
       {open && <div className="chat-scrim" onClick={() => setOpen(false)} />}
 
-      <aside className={`chat-panel chat-panel-gemini ${open ? 'chat-panel-open' : ''}`} aria-hidden={!open}>
+      <aside className={`chat-panel chat-panel-${variant} ${open ? 'chat-panel-open' : ''}`} aria-hidden={!open}>
         <header className="chat-header">
-          <h3>GEMINI</h3>
+          <h3>{label}</h3>
           <div className="chat-header-actions">
-            <select
-              className="chat-model"
-              value={model}
-              onChange={(e) => setModel(e.target.value)}
-              disabled={streaming || !status?.configured}
-            >
-              {status?.models.map((m) => (
-                <option key={m} value={m}>
-                  {m}
-                </option>
+            <div className="chat-engines">
+              {(['claude', 'codex'] as ChatEngine[]).map((id) => (
+                <button
+                  key={id}
+                  className={`chat-engine ${engine === id ? 'chat-engine-on' : ''}`}
+                  onClick={() => switchEngine(id)}
+                  disabled={streaming}
+                >
+                  {id === 'claude' ? 'Claude' : 'GPT'}
+                </button>
               ))}
-            </select>
+            </div>
+            {engine === 'claude' && (
+              <select
+                className="chat-model"
+                value={model}
+                onChange={(e) => setModel(e.target.value)}
+                disabled={streaming}
+              >
+                {status?.models.map((m) => (
+                  <option key={m} value={m}>
+                    {m}
+                  </option>
+                ))}
+              </select>
+            )}
             <button
               className="chat-icon-btn"
-              onClick={() => setEntries([])}
+              onClick={reset}
               disabled={streaming || entries.length === 0}
-              title="Clear conversation"
+              title="Новый разговор"
             >
               ⌫
             </button>
@@ -149,21 +204,14 @@ export default function GeminiPanel() {
           </div>
         </header>
 
-        {status && !status.configured && (
-          <div className="chat-warning">
-            GEMINI_API_KEY не задан в .env — панель работать не будет.
-          </div>
-        )}
-        {status?.configured && !status.viaProxy && (
-          <div className="chat-warning">
-            Прокси не настроен: backend пойдёт в Google напрямую.
-          </div>
-        )}
-
         <div className="chat-messages" ref={scrollRef}>
           {entries.length === 0 && (
             <p className="chat-empty">
-              Спроси что угодно. Enter — отправить, Shift+Enter — перенос строки.
+              {projectId
+                ? `Разговор про проект «${projectId}» — модель читает его файлы, но не меняет.`
+                : 'Просто разговор, без инструментов и без проекта.'}
+              <br />
+              Enter — отправить, Shift+Enter — перенос строки.
             </p>
           )}
           {entries.map((entry, i) => (
@@ -177,6 +225,9 @@ export default function GeminiPanel() {
               )}
             </div>
           ))}
+          {streaming && engine === 'codex' && (
+            <p className="chat-empty">GPT отвечает целиком, без стрима — ждём…</p>
+          )}
         </div>
 
         <div className="chat-composer">
@@ -188,7 +239,6 @@ export default function GeminiPanel() {
             onKeyDown={onInputKey}
             placeholder="Сообщение…"
             rows={3}
-            disabled={!status?.configured}
           />
           <div className="chat-composer-actions">
             <MicButton onText={(t) => setInput((v) => (v ? `${v} ${t}` : t))} disabled={streaming} />
@@ -197,11 +247,7 @@ export default function GeminiPanel() {
                 Stop
               </button>
             ) : (
-              <button
-                className="btn btn-primary btn-sm"
-                onClick={send}
-                disabled={!input.trim() || !status?.configured}
-              >
+              <button className="btn btn-primary btn-sm" onClick={send} disabled={!input.trim()}>
                 Send
               </button>
             )}

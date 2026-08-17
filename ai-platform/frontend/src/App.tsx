@@ -2,6 +2,7 @@ import { Routes, Route, Link } from 'react-router-dom'
 import Dashboard from './pages/Dashboard'
 import ProjectPage from './pages/ProjectPage'
 import GeminiPanel from './components/GeminiPanel'
+import ChatPanel from './components/ChatPanel'
 import Clock from './components/Clock'
 import SoundToggle from './components/SoundToggle'
 import SiteFooter from './components/SiteFooter'
@@ -26,6 +27,7 @@ function App() {
         </Routes>
       </main>
       <GeminiPanel />
+      <ChatPanel />
       <SiteFooter />
     </div>
   )

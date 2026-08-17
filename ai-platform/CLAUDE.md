@@ -25,18 +25,23 @@ docker compose -f docker-compose.dev.yml up -d
 - `index.ts` — Express + WS. Роуты монтируются под `/api/projects/:id/<feature>` и `/api/{system,gemini}`; WS — `/ws/terminal/:id`, `/ws/events`.
 - `services/` — вся логика:
   - `claudeQuery.ts` → **`streamClaude`**: `claude -p --output-format stream-json` в контейнере, с tool-политикой (`READ_ONLY_TOOLS` / `disallowedTools`), моделью, таймаутом, cancel. Движок всех одноразовых LLM-запросов.
-  - `dockerService.ts` → `execInContainer` / `execInContainerSync`, `tmuxSessionName`, `EXEC_USER_ARGS`, `UTF8_EXEC_ENV`.
+  - `dockerService.ts` → `execInContainer` / `execInContainerSync`, `tmuxSessionName`, `EXEC_USER_ARGS`, `UTF8_EXEC_ENV`, `pasteIntoSession` (base64→tmux buffer→`paste-buffer`, без Enter; им пользуются `screenshots/attach` и `session/paste`).
   - `metadataService.ts` — персистентность в `/data` (атомарный tmp→rename, сериализованная очередь записей, кеш опережается только после успешной записи). **Образец для любого нового стора.**
   - `sse.ts` → `openSse` (frames `{text|error|done}`).
   - `agents.ts` — реестр агентов (claude/opencode/codex) для интерактивных tmux-сессий.
   - `screenshotService.ts` — хранилище скриншотов на томе `screenshots`. Бэкенд пишет в `/data/screenshots/<project>/`, агент видит тот же том read-only как `/screenshots/<project>/` — **путь для промпта отдаёт только `agentPathOf`**, руками не собирать.
   - `gitService.ts`, `projectService.ts`, `claudeEvents.ts`.
+  - `engines.ts` → `runEngine` — единый интерфейс к claude/opencode/codex/gemini; `project` опционален (без него cwd `/workspace`), у codex `readOnly` включает `-a never -s read-only`.
 - `routes/` — тонкие обёртки над сервисами. **`review.ts` и `explain.ts` — эталонные паттерны** одноразового LLM-запроса со стримом в SSE.
+  - `voice.ts` — `POST /api/voice/transcribe` (multipart `audio`): распознавание речи через Gemini (`GEMINI_MODEL`, аудио уходит inline). Аудио — данные, а не инструкции (оговорка в промпте).
+  - `chat.ts` — свободный чат, смонтирован дважды: `/api/claude/chat` (без проекта и без инструментов) и `/api/projects/:id/chat` (cwd проекта, `READ_ONLY_TOOLS`). Claude помнит разговор своей сессией (`sessionId` + `resume`), codex сессию назвать нельзя — ему транскрипт пересылается целиком.
 
 ## Frontend (frontend/src)
 
 - `services/api.ts` → **`consumeTextStream`** читает SSE `{text|error|done}`. Переиспользовать для любого нового стрима.
 - `components/GeminiPanel.tsx` — slide-out `aside` с табом, hotkey, дропдауном модели, стримом. Скелет для новых панелей.
+- `components/ChatPanel.tsx` — тот же drawer для контейнерных агентов: Claude / GPT (codex), переключатель движка, Ctrl+Shift+K (глобально) и Ctrl+Shift+J (в проекте, с чтением файлов). Оформление общее — классы `chat-*`, акцент задаётся модификатором (`chat-panel-gemini|claude|project` → `--chat-accent`).
+- `components/MicButton.tsx` — кнопка микрофона: MediaRecorder → `/api/voice/transcribe` → текст в колбэк. Стоит в обеих чат-панелях, в коммит-сообщении, в модалке «With task…» и в тулбаре проекта (там надиктованное уходит в панель агента через `session/paste`). **Микрофону нужен secure context** — по http работает только на localhost.
 - `components/ScreenshotPanel.tsx` — правый drawer (Ctrl+Shift+S): Ctrl+V/drag&drop загружает скриншот, «→ сессия» вставляет его путь в промпт запущенного агента через `tmux paste-buffer`.
 - `services/clipboard.ts` → `copyText` — копирование с фолбэком на `execCommand`: на не-secure origin (http по LAN-IP) `navigator.clipboard` недоступен.
 - `pages/ProjectPage.tsx` — тулбар проекта, diff, файлы.

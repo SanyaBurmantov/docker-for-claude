@@ -6,7 +6,7 @@ import {
   gitCommit, gitBranch, gitCheckout, gitPull, gitPush, gitRollback,
   saveGitCredentials, archiveUrl, streamReview, streamDayLog, generateCommitMessage,
   fetchChecklistFile, saveChecklistFile, TASKS_FILE, FIXES_FILE,
-  fetchAgents, isAgentId, AgentId, AgentInfo,
+  fetchAgents, isAgentId, AgentId, AgentInfo, pasteIntoSession,
   Project, novncUrl, StartSessionOptions,
 } from '../services/api'
 import { parseTasks, serialize, withTasksAdded } from '../services/checklist'
@@ -16,6 +16,8 @@ import FileExplorer from '../components/FileExplorer'
 import ChecklistPanel, { TASKS_COPY, FIXES_COPY } from '../components/ChecklistPanel'
 import AutoGrowTextarea from '../components/AutoGrowTextarea'
 import ScreenshotPanel from '../components/ScreenshotPanel'
+import ChatPanel from '../components/ChatPanel'
+import MicButton from '../components/MicButton'
 import Modal, { ConfirmDialog } from '../components/Modal'
 import { useToast } from '../components/Toast'
 
@@ -279,6 +281,16 @@ export default function ProjectPage() {
     }
   }
 
+  /** Dictation goes where the user's typing would: into the agent's prompt, unsubmitted. */
+  async function handleDictateToSession(text: string) {
+    if (!id) return
+    try {
+      await pasteIntoSession(id, `${text} `)
+    } catch (e) {
+      toast('error', `Не удалось вставить в сессию: ${e instanceof Error ? e.message : 'Unknown error'}`)
+    }
+  }
+
   async function handleCommit() {
     if (!id || !commitMessage.trim()) return
     try {
@@ -516,6 +528,7 @@ export default function ProjectPage() {
           {sessionRunning && (
             <>
               <span className="badge badge-agent" title="Агент этой сессии">{runningAgentLabel}</span>
+              <MicButton onText={handleDictateToSession} title={`Надиктовать в ${runningAgentLabel}`} />
               <button className="btn btn-danger btn-sm" onClick={handleStopSession}>
                 Stop {runningAgentLabel}
               </button>
@@ -705,6 +718,10 @@ export default function ProjectPage() {
                   }}
                   disabled={generatingMessage}
                 />
+                <MicButton
+                  onText={(t) => setCommitMessage((v) => (v ? `${v} ${t}` : t))}
+                  disabled={generatingMessage}
+                />
                 <button
                   className="btn btn-secondary btn-sm"
                   onClick={handleGenerateCommitMessage}
@@ -837,6 +854,7 @@ export default function ProjectPage() {
       </div>
 
       {id && <ScreenshotPanel projectId={id} sessionRunning={sessionRunning} />}
+      {id && <ChatPanel projectId={id} />}
 
       {pendingRestart && (
         <ConfirmDialog
@@ -878,6 +896,7 @@ export default function ProjectPage() {
               placeholder="Опиши задачу — Claude начнёт работать сразу после запуска…"
               onChange={(e) => setTaskPrompt(e.target.value)}
             />
+            <MicButton onText={(t) => setTaskPrompt((v) => (v ? `${v} ${t}` : t))} />
           </div>
           <label className="checkbox-field">
             <input

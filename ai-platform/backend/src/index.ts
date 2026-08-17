@@ -13,6 +13,8 @@ import explainRouter from './routes/explain';
 import reviewRouter from './routes/review';
 import commitMessageRouter from './routes/commitMessage';
 import screenshotsRouter from './routes/screenshots';
+import chatRouter from './routes/chat';
+import voiceRouter from './routes/voice';
 import { handleEventsWebSocket } from './routes/events';
 import { claudeEvents } from './services/claudeEvents';
 
@@ -30,8 +32,11 @@ app.use('/api/projects/:id/explain', explainRouter);
 app.use('/api/projects/:id/review', reviewRouter);
 app.use('/api/projects/:id/commit-message', commitMessageRouter);
 app.use('/api/projects/:id/screenshots', screenshotsRouter);
+app.use('/api/projects/:id/chat', chatRouter);
 app.use('/api/system', systemRouter);
 app.use('/api/gemini', geminiRouter);
+app.use('/api/claude/chat', chatRouter);
+app.use('/api/voice', voiceRouter);
 
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok' });

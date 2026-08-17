@@ -1,6 +1,6 @@
 import { Router, type Request, type Response } from 'express';
 import multer from 'multer';
-import { execInContainer, tmuxSessionName } from '../services/dockerService';
+import { pasteIntoSession, tmuxSessionName } from '../services/dockerService';
 import { isValidProjectName } from '../services/projectService';
 import { list, save, remove, pathOf, agentPathOf, isImage } from '../services/screenshotService';
 
@@ -95,21 +95,12 @@ router.post('/attach', async (req: Request<{ id: string }>, res: Response) => {
       paths.push(agentPathOf(req.params.id, name));
     }
 
-    const sessionName = tmuxSessionName(req.params.id);
-    try {
-      await execInContainer(CONTAINER_NAME, `tmux has-session -t ${sessionName}`);
-    } catch {
+    // Trailing space so the user can keep typing after the path.
+    const pasted = await pasteIntoSession(CONTAINER_NAME, tmuxSessionName(req.params.id), `${paths.join(' ')} `);
+    if (!pasted) {
       res.status(409).json({ error: 'Сессия не запущена — вставлять некуда' });
       return;
     }
-
-    // Same base64 hop as sessions.ts: the text goes through a pipe, never through
-    // shell syntax. Trailing space so the user can keep typing after the path.
-    const b64 = Buffer.from(`${paths.join(' ')} `, 'utf-8').toString('base64');
-    await execInContainer(
-      CONTAINER_NAME,
-      `printf '%s' '${b64}' | base64 -d | tmux load-buffer - && tmux paste-buffer -t ${sessionName} -d`
-    );
 
     res.json({ success: true, paths });
   } catch (err) {

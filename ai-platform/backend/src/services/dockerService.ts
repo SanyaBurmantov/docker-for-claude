@@ -78,3 +78,24 @@ export async function containerExists(containerName: string): Promise<boolean> {
     return false;
   }
 }
+
+/**
+ * Types text into the running agent's pane the way the user would have typed it:
+ * pasted, not submitted, so a prompt can still be edited before Enter. Same
+ * base64 hop as everywhere else — arbitrary text never touches shell syntax.
+ * Returns false when there is no session to paste into.
+ */
+export async function pasteIntoSession(containerName: string, sessionName: string, text: string): Promise<boolean> {
+  try {
+    await execInContainer(containerName, `tmux has-session -t ${sessionName}`);
+  } catch {
+    return false;
+  }
+
+  const b64 = Buffer.from(text, 'utf-8').toString('base64');
+  await execInContainer(
+    containerName,
+    `printf '%s' '${b64}' | base64 -d | tmux load-buffer - && tmux paste-buffer -t ${sessionName} -d`
+  );
+  return true;
+}

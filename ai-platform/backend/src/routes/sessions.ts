@@ -1,6 +1,6 @@
 import { randomUUID } from 'crypto';
 import { Router, type Request, type Response } from 'express';
-import { execInContainer, execInContainerSync, tmuxSessionName } from '../services/dockerService';
+import { execInContainer, execInContainerSync, pasteIntoSession, tmuxSessionName } from '../services/dockerService';
 import { isValidProjectName } from '../services/projectService';
 import { AGENTS, DEFAULT_AGENT, isAgentId, type AgentId } from '../services/agents';
 import { getAll, metaFor, update } from '../services/metadataService';
@@ -124,6 +124,26 @@ router.get('/status', async (req: Request<{ id: string }>, res: Response) => {
 });
 
 // Claude runs under tmux with mouse mode on, so a drag-select inside it lands in
+/** Types dictated (or otherwise composed) text into the agent's pane, without submitting. */
+router.post('/paste', async (req: Request<{ id: string }>, res: Response) => {
+  const { text } = (req.body ?? {}) as { text?: unknown };
+  if (typeof text !== 'string' || !text.trim()) {
+    res.status(400).json({ error: 'text is required' });
+    return;
+  }
+
+  try {
+    const pasted = await pasteIntoSession(CONTAINER_NAME, tmuxSessionName(req.params.id), text);
+    if (!pasted) {
+      res.status(409).json({ error: 'Сессия не запущена — вставлять некуда' });
+      return;
+    }
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: String(err) });
+  }
+});
+
 // tmux's own paste buffer, not xterm's selection. Expose the most recent buffer so
 // the UI can pull it out and the user can copy it in the browser. `|| true` keeps
 // the exec at code 0 (empty output) when no buffer has been set yet.
