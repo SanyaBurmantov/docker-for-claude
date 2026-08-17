@@ -681,6 +681,8 @@ button.nav-link {
   justify-content: flex-end;
   gap: 8px;
   margin-bottom: 8px;
+  /* На узком экране кнопки переносятся, а не выдавливаются за край строки */
+  flex-wrap: wrap;
 }
 
 .terminal-font-controls {
@@ -704,6 +706,17 @@ button.nav-link {
   flex-direction: column;
   padding: 12px;
   background: var(--bg-0);
+}
+
+/* Верхнее меню проекта внутри оверлея: своя высота, терминал забирает остаток */
+.terminal-wrap-fullscreen .project-toolbar {
+  flex: none;
+  padding-top: 0;
+  margin-bottom: 8px;
+}
+
+.terminal-wrap-fullscreen .terminal-toolbar {
+  flex: none;
 }
 
 .terminal-wrap-fullscreen .terminal-container,

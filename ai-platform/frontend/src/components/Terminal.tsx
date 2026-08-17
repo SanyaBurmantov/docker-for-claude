@@ -30,9 +30,18 @@ interface TerminalProps {
   /** Rendered at the left of the toolbar row — lets the parent put its own controls
    *  (e.g. "Новая задача") on the same line as the font/search controls. */
   toolbarExtra?: ReactNode
+  /** Показывается только в полноэкранном режиме — оверлей перекрывает страницу, и без этого
+   *  верхнее меню проекта становится недоступным. */
+  fullscreenExtra?: ReactNode
 }
 
-export default function Terminal({ sessionId, projectId, visible = true, toolbarExtra }: TerminalProps) {
+export default function Terminal({
+  sessionId,
+  projectId,
+  visible = true,
+  toolbarExtra,
+  fullscreenExtra,
+}: TerminalProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const xtermRef = useRef<XTerm | null>(null)
   const fitAddonRef = useRef<FitAddon | null>(null)
@@ -248,6 +257,7 @@ export default function Terminal({ sessionId, projectId, visible = true, toolbar
 
   return (
     <div className={fullscreen ? 'terminal-wrap terminal-wrap-fullscreen' : 'terminal-wrap'}>
+      {fullscreen && fullscreenExtra}
       <div className="terminal-toolbar">
         {toolbarExtra}
         <div className="terminal-font-controls">

@@ -519,79 +519,85 @@ export default function ProjectPage() {
     { key: 'fixes', label: 'Fixes' },
   ]
 
-  return (
-    <div className="project-page">
-      <div className="project-toolbar">
-        <div className="project-toolbar-left">
-          <Link to="/" className="btn btn-secondary btn-sm">← Back</Link>
-          <h2>{project.name}</h2>
-          {currentBranch && <span className="badge badge-git" title="Current branch">⎇ {currentBranch}</span>}
-          <span className={sessionRunning ? 'badge badge-running' : 'badge badge-offline'}>
-            <span className={`status-indicator ${sessionRunning ? 'running' : 'offline'}`} />
-            {sessionRunning ? 'Running' : 'Offline'}
-          </span>
-          {sessionRunning && (
-            <>
-              <span className="badge badge-agent" title="Агент этой сессии">{runningAgentLabel}</span>
-              <button className="btn btn-danger btn-sm" onClick={handleStopSession}>
-                Stop {runningAgentLabel}
-              </button>
-            </>
-          )}
-          {!sessionRunning && (
-            <>
-              {agents.length > 1 && (
-                <select
-                  className="agent-select"
-                  value={agent}
-                  onChange={(e) => setAgent(e.target.value as AgentId)}
-                  disabled={starting}
-                  title="Каким агентом открыть проект"
-                >
-                  {agents.map((a) => (
-                    <option key={a.id} value={a.id}>{a.label}</option>
-                  ))}
-                </select>
-              )}
-              <button className="btn btn-success btn-sm" onClick={() => handleStartSession()} disabled={starting}>
-                {starting ? 'Starting…' : `Start ${agentLabel}`}
-              </button>
+  // Тот же тулбар показывается и внутри полноэкранного терминала — оверлей перекрывает страницу,
+  // а Start/Stop/Resume и остальное должны оставаться под рукой.
+  const projectToolbar = (
+    <div className="project-toolbar">
+      <div className="project-toolbar-left">
+        <Link to="/" className="btn btn-secondary btn-sm">← Back</Link>
+        <h2>{project.name}</h2>
+        {currentBranch && <span className="badge badge-git" title="Current branch">⎇ {currentBranch}</span>}
+        <span className={sessionRunning ? 'badge badge-running' : 'badge badge-offline'}>
+          <span className={`status-indicator ${sessionRunning ? 'running' : 'offline'}`} />
+          {sessionRunning ? 'Running' : 'Offline'}
+        </span>
+        {sessionRunning && (
+          <>
+            <span className="badge badge-agent" title="Агент этой сессии">{runningAgentLabel}</span>
+            <button className="btn btn-danger btn-sm" onClick={handleStopSession}>
+              Stop {runningAgentLabel}
+            </button>
+          </>
+        )}
+        {!sessionRunning && (
+          <>
+            {agents.length > 1 && (
+              <select
+                className="agent-select"
+                value={agent}
+                onChange={(e) => setAgent(e.target.value as AgentId)}
+                disabled={starting}
+                title="Каким агентом открыть проект"
+              >
+                {agents.map((a) => (
+                  <option key={a.id} value={a.id}>{a.label}</option>
+                ))}
+              </select>
+            )}
+            <button className="btn btn-success btn-sm" onClick={() => handleStartSession()} disabled={starting}>
+              {starting ? 'Starting…' : `Start ${agentLabel}`}
+            </button>
+            <button
+              className="btn btn-secondary btn-sm"
+              onClick={() => handleStartSession({ mode: 'continue' })}
+              disabled={starting}
+              title="--continue: продолжить последний диалог"
+            >
+              Resume
+            </button>
+            {supportsPrompt && (
               <button
                 className="btn btn-secondary btn-sm"
-                onClick={() => handleStartSession({ mode: 'continue' })}
+                onClick={() => setShowTaskModal(true)}
                 disabled={starting}
-                title="--continue: продолжить последний диалог"
               >
-                Resume
+                With task…
               </button>
-              {supportsPrompt && (
-                <button
-                  className="btn btn-secondary btn-sm"
-                  onClick={() => setShowTaskModal(true)}
-                  disabled={starting}
-                >
-                  With task…
-                </button>
-              )}
-            </>
-          )}
-        </div>
-        <div className="project-toolbar-right">
-          {id && (
-            <a href={archiveUrl(id)} className="btn btn-secondary btn-sm" title="Скачать проект (без node_modules и .git)">
-              ⬇ .tar.gz
-            </a>
-          )}
-          <a
-            href={novncUrl()}
-            className="btn btn-secondary btn-sm"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Open noVNC
-          </a>
-        </div>
+            )}
+          </>
+        )}
       </div>
+      <div className="project-toolbar-right">
+        {id && (
+          <a href={archiveUrl(id)} className="btn btn-secondary btn-sm" title="Скачать проект (без node_modules и .git)">
+            ⬇ .tar.gz
+          </a>
+        )}
+        <a
+          href={novncUrl()}
+          className="btn btn-secondary btn-sm"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          Open noVNC
+        </a>
+      </div>
+    </div>
+  )
+
+  return (
+    <div className="project-page">
+      {projectToolbar}
 
       <div className="tabs">
         {tabs.map((tab) => (
@@ -614,6 +620,7 @@ export default function ProjectPage() {
             sessionId={sessionId}
             projectId={id}
             visible={activeTab === 'terminal'}
+            fullscreenExtra={projectToolbar}
             toolbarExtra={
               <>
                 {/* Надиктованное уходит в промпт агента, поэтому кнопка живёт у его терминала. */}
