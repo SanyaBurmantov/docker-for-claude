@@ -1740,6 +1740,13 @@ button.nav-link {
   left: 380px;
 }
 
+/* Табы лежат поверх панелей (z-index выше), поэтому чужие прячем, пока одна
+   открыта — иначе они перекрывают её содержимое. */
+body:has(.chat-panel-open, .shots-panel-open) .chat-tab:not(.chat-tab-open),
+body:has(.chat-panel-open, .shots-panel-open) .shots-tab:not(.shots-tab-open) {
+  display: none;
+}
+
 .chat-tab-label {
   display: block;
   writing-mode: vertical-rl;
@@ -2330,9 +2337,6 @@ button.nav-link {
 
 @media (max-width: 640px) {
   .shots-panel { width: 100%; }
-  /* An open chat drawer flips its tab to this edge, and a full-width panel hides
-     everything behind it anyway, so the screenshots tab steps aside. */
-  body:has(.chat-panel-open) .shots-tab { display: none; }
   /* A full-width panel leaves no room to the right of it, so the tab moves to the
      other edge instead of off-screen. */
   .shots-tab-open { right: auto; left: 0; border-left: none; border-right: 1px solid var(--line-strong); }

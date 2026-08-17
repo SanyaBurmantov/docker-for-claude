@@ -528,7 +528,6 @@ export default function ProjectPage() {
           {sessionRunning && (
             <>
               <span className="badge badge-agent" title="Агент этой сессии">{runningAgentLabel}</span>
-              <MicButton onText={handleDictateToSession} title={`Надиктовать в ${runningAgentLabel}`} />
               <button className="btn btn-danger btn-sm" onClick={handleStopSession}>
                 Stop {runningAgentLabel}
               </button>
@@ -611,14 +610,20 @@ export default function ProjectPage() {
             projectId={id}
             visible={activeTab === 'terminal'}
             toolbarExtra={
-              <button
-                className="btn btn-secondary btn-sm"
-                onClick={() => requestRestart()}
-                disabled={starting}
-                title={`Перезапустить ${agentLabel} с чистым контекстом — закрывает диалог и открывает заново`}
-              >
-                ✦ Новая задача
-              </button>
+              <>
+                {/* Надиктованное уходит в промпт агента, поэтому кнопка живёт у его терминала. */}
+                {sessionRunning && (
+                  <MicButton onText={handleDictateToSession} title={`Надиктовать в ${runningAgentLabel}`} />
+                )}
+                <button
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => requestRestart()}
+                  disabled={starting}
+                  title={`Перезапустить ${agentLabel} с чистым контекстом — закрывает диалог и открывает заново`}
+                >
+                  ✦ Новая задача
+                </button>
+              </>
             }
           />
         </div>
