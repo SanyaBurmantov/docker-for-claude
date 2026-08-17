@@ -235,7 +235,7 @@ export default function DiffViewer({ diff, projectId }: DiffViewerProps) {
           ) : answer ? (
             <div className="diff-pop-body">
               {answer}
-              {streaming && <span className="gemini-caret" />}
+              {streaming && <span className="chat-caret" />}
             </div>
           ) : (
             <div className="diff-pop-body diff-pop-waiting">

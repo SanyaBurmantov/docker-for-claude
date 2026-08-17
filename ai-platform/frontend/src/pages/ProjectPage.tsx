@@ -17,7 +17,7 @@ import ChecklistPanel, { TASKS_COPY, FIXES_COPY } from '../components/ChecklistP
 import AutoGrowTextarea from '../components/AutoGrowTextarea'
 import ScreenshotPanel from '../components/ScreenshotPanel'
 import ChatPanel from '../components/ChatPanel'
-import MicButton from '../components/MicButton'
+import MicButton, { appendTo } from '../components/MicButton'
 import Modal, { ConfirmDialog } from '../components/Modal'
 import { useToast } from '../components/Toast'
 
@@ -736,7 +736,7 @@ export default function ProjectPage() {
                   disabled={generatingMessage}
                 />
                 <MicButton
-                  onText={(t) => setCommitMessage((v) => (v ? `${v} ${t}` : t))}
+                  onText={appendTo(setCommitMessage)}
                   disabled={generatingMessage}
                 />
                 <button
@@ -807,7 +807,7 @@ export default function ProjectPage() {
                       {line || ' '}
                     </div>
                   ))}
-                  {reviewing && <span className="gemini-caret" />}
+                  {reviewing && <span className="chat-caret" />}
                 </div>
               ) : reviewing ? (
                 <div className="git-output review-waiting">Claude читает дифф и файлы проекта…</div>
@@ -913,7 +913,7 @@ export default function ProjectPage() {
               placeholder="Опиши задачу — Claude начнёт работать сразу после запуска…"
               onChange={(e) => setTaskPrompt(e.target.value)}
             />
-            <MicButton onText={(t) => setTaskPrompt((v) => (v ? `${v} ${t}` : t))} />
+            <MicButton onText={appendTo(setTaskPrompt)} />
             <button
               className="btn btn-secondary btn-sm"
               onClick={() => setTaskPrompt(POLISH_LAST_PROMPT)}

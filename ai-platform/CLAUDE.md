@@ -39,12 +39,15 @@ docker compose -f docker-compose.dev.yml up -d
 ## Frontend (frontend/src)
 
 - `services/api.ts` → **`consumeTextStream`** читает SSE `{text|error|done}`. Переиспользовать для любого нового стрима.
-- `components/GeminiPanel.tsx` — slide-out `aside` с табом, hotkey, дропдауном модели, стримом. Скелет для новых панелей.
-- `components/ChatPanel.tsx` — тот же drawer для контейнерных агентов: Claude / GPT (codex), переключатель движка, Ctrl+Shift+K (глобально) и Ctrl+Shift+J (в проекте, с чтением файлов). Оформление общее — классы `chat-*`, акцент задаётся модификатором (`chat-panel-gemini|claude|project` → `--chat-accent`).
+- `components/Drawer.tsx` — **общая оболочка любой выдвижной панели**: таб на краю экрана, скрим, шапка с заголовком и крестиком, hotkey и Escape. Сторона — проп `side`, акцент и слот таба — класс `drawer-<id>`. Новую панель начинать отсюда.
+- `hooks/useChat.ts` → `useChat(sender)` — разговор чат-панели: история, ввод, стрим одного ответа, отмена. Куда идёт запрос, знает только `sender`.
+- `components/ChatDrawer.tsx` — `Drawer` + лента сообщений + композер с микрофоном. На нём построены обе чат-панели, так что различаются они только тем, кто отвечает.
+- `components/GeminiPanel.tsx` — Gemini (Ctrl+Shift+G): чистый текст-в/текст-из, дропдаун модели.
+- `components/ChatPanel.tsx` — контейнерные агенты: Claude / GPT (codex), переключатель движка, Ctrl+Shift+K (глобально) и Ctrl+Shift+J (в проекте, с чтением файлов).
 - `components/Markdown.tsx` — рендер ответа модели (`react-markdown` + `remark-gfm`), стили — класс `.md-body`. Ответы приходят markdown'ом, поэтому в чат-панелях текст модели идёт через него, а сообщения пользователя и ошибки — как есть.
-- `hooks/useDrawer.ts` — состояние выдвижной панели, общее на все: панели делят края экрана, поэтому открытие одной закрывает остальные. Слоты табов на левом краю задаются `--tab-slot` (шаг = `--tab-height`).
+- `hooks/useDrawer.ts` — состояние выдвижной панели, общее на все: панели делят края экрана, поэтому открытие одной закрывает остальные. Слоты табов задаются `--tab-slot` (шаг = `--tab-height`), ширина — `--drawer-width` на `.drawer-left|right`.
 - `components/MicButton.tsx` — кнопка микрофона: MediaRecorder → `/api/voice/transcribe` → текст в колбэк. Стоит в обеих чат-панелях, в коммит-сообщении, в модалке «With task…» и в тулбаре терминала агента (там надиктованное уходит в его промпт через `session/paste`). **Микрофону нужен secure context** — по http работает только на localhost.
-- `components/ScreenshotPanel.tsx` — правый drawer (Ctrl+Shift+S): Ctrl+V/drag&drop загружает скриншот, «→ сессия» вставляет его путь в промпт запущенного агента через `tmux paste-buffer`.
+- `components/ScreenshotPanel.tsx` — `Drawer` справа (Ctrl+Shift+S): Ctrl+V/drag&drop загружает скриншот, «→ сессия» вставляет его путь в промпт запущенного агента через `tmux paste-buffer`.
 - `services/clipboard.ts` → `copyText` — копирование с фолбэком на `execCommand`: на не-secure origin (http по LAN-IP) `navigator.clipboard` недоступен.
 - `pages/ProjectPage.tsx` — тулбар проекта, diff, файлы.
 

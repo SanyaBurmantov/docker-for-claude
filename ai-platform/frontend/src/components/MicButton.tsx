@@ -1,6 +1,11 @@
-import { useEffect, useRef, useState } from 'react'
+import { Dispatch, SetStateAction, useEffect, useRef, useState } from 'react'
 import { transcribeAudio } from '../services/api'
 import { useToast } from './Toast'
+
+/** The usual destination for dictation: appended to whatever is already in a field. */
+export function appendTo(setText: Dispatch<SetStateAction<string>>) {
+  return (text: string) => setText((v) => (v ? `${v} ${text}` : text))
+}
 
 interface Props {
   /** Gets the recognised text; the caller decides where to put it. */

@@ -23,8 +23,12 @@ export function useDrawer(id: string) {
   }
 
   return {
+    id,
     open,
     close: () => set(false),
     toggle: () => set(!open),
   }
 }
+
+export type DrawerState = ReturnType<typeof useDrawer>
+

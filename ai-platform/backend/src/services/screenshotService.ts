@@ -21,6 +21,10 @@ export function agentPathOf(project: string, name: string): string {
 
 const EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp']);
 
+const MAX_BASE = 60;
+/** Room left for the `-2`, `-3`… a name collision appends — see `save`. */
+const MAX_NEW_BASE = MAX_BASE - 8;
+
 export interface Screenshot {
   name: string;
   /** Absolute path as the agent sees it — this is what gets pasted into a prompt. */
@@ -44,7 +48,7 @@ function safeName(original: string): string {
       .replace(/\s+/g, '-')
       .replace(/[^\p{L}\p{N}._-]/gu, '')
       .replace(/^[.\-]+/, '')
-      .slice(0, 60) || 'screenshot';
+      .slice(0, MAX_BASE) || 'screenshot';
   return `${clean}${EXTENSIONS.has(ext) ? ext : '.png'}`;
 }
 
@@ -56,9 +60,9 @@ function dirFor(project: string): string {
   return path.join(STORE_DIR, project);
 }
 
-/** Rejects any name that did not come out of `safeName`, so a crafted request
- *  cannot walk out of the project's directory. */
-function fileFor(project: string, name: string): string | null {
+/** Absolute path on the backend's filesystem, or null if the name did not come out
+ *  of `safeName` — a crafted one cannot walk out of the project's directory. */
+export function pathOf(project: string, name: string): string | null {
   if (name !== safeName(name)) return null;
   return path.join(dirFor(project), name);
 }
@@ -97,7 +101,9 @@ export async function save(project: string, original: string, data: Buffer): Pro
 
   const wanted = safeName(original);
   const ext = path.extname(wanted);
-  const base = path.basename(wanted, ext);
+  // Trimmed so the suffix below still fits inside `safeName`'s limit — a longer name
+  // would be one `safeName` rejects, leaving the file impossible to open or delete.
+  const base = path.basename(wanted, ext).slice(0, MAX_NEW_BASE);
 
   let name = wanted;
   for (let i = 2; ; i++) {
@@ -120,13 +126,8 @@ export async function save(project: string, original: string, data: Buffer): Pro
   };
 }
 
-/** Absolute path on the backend's filesystem, or null if the name is not ours. */
-export function pathOf(project: string, name: string): string | null {
-  return fileFor(project, name);
-}
-
 export async function remove(project: string, name: string): Promise<boolean> {
-  const file = fileFor(project, name);
+  const file = pathOf(project, name);
   if (!file) return false;
   try {
     await fs.unlink(file);

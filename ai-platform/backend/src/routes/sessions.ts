@@ -123,7 +123,6 @@ router.get('/status', async (req: Request<{ id: string }>, res: Response) => {
   }
 });
 
-// Claude runs under tmux with mouse mode on, so a drag-select inside it lands in
 /** Types dictated (or otherwise composed) text into the agent's pane, without submitting. */
 router.post('/paste', async (req: Request<{ id: string }>, res: Response) => {
   const { text } = (req.body ?? {}) as { text?: unknown };
@@ -144,6 +143,7 @@ router.post('/paste', async (req: Request<{ id: string }>, res: Response) => {
   }
 });
 
+// Claude runs under tmux with mouse mode on, so a drag-select inside it lands in
 // tmux's own paste buffer, not xterm's selection. Expose the most recent buffer so
 // the UI can pull it out and the user can copy it in the browser. `|| true` keeps
 // the exec at code 0 (empty output) when no buffer has been set yet.

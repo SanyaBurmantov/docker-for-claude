@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import Drawer from './Drawer'
 import {
   fetchScreenshots,
   uploadScreenshots,
@@ -26,7 +27,8 @@ function humanSize(bytes: number): string {
  * into the project root, then hand its path to the running agent in one click.
  */
 export default function ScreenshotPanel({ projectId, sessionRunning }: ScreenshotPanelProps) {
-  const { open, close, toggle } = useDrawer('shots')
+  const drawer = useDrawer('shots')
+  const { open } = drawer
   const [shots, setShots] = useState<Screenshot[]>([])
   const [busy, setBusy] = useState(false)
   const [dragging, setDragging] = useState(false)
@@ -34,15 +36,9 @@ export default function ScreenshotPanel({ projectId, sessionRunning }: Screensho
   const fileInputRef = useRef<HTMLInputElement>(null)
   const toast = useToast()
 
-  const reload = useCallback(() => {
-    fetchScreenshots(projectId)
-      .then(setShots)
-      .catch(() => setShots([]))
-  }, [projectId])
-
   useEffect(() => {
-    if (open) reload()
-  }, [open, reload])
+    if (open) fetchScreenshots(projectId).then(setShots).catch(() => setShots([]))
+  }, [open, projectId])
 
   const upload = useCallback(
     async (files: File[]) => {
@@ -61,22 +57,6 @@ export default function ScreenshotPanel({ projectId, sessionRunning }: Screensho
     },
     [projectId, toast]
   )
-
-  // Ctrl+Shift+S toggles from anywhere, including inside the terminal.
-  useEffect(() => {
-    function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape' && open) {
-        if (preview) setPreview(null)
-        else close()
-      }
-      if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 's') {
-        e.preventDefault()
-        toggle()
-      }
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [open, preview])
 
   // A screenshot normally arrives on the clipboard, never as a file on disk, so the
   // panel takes a paste from anywhere on the page while it is open — that is the
@@ -113,35 +93,28 @@ export default function ScreenshotPanel({ projectId, sessionRunning }: Screensho
 
   return (
     <>
-      <button
-        className={`shots-tab ${open ? 'shots-tab-open' : ''}`}
-        onClick={() => toggle()}
-        title="Скриншоты (Ctrl+Shift+S)"
-        aria-label="Toggle screenshots panel"
+      <Drawer
+        drawer={drawer}
+        label="SHOTS"
+        hotkey="s"
+        side="right"
+        // The lightbox opens on top of the panel, so Escape closes it first.
+        onEscape={() => {
+          if (!preview) return false
+          setPreview(null)
+          return true
+        }}
+        headerActions={
+          <button
+            className="drawer-icon-btn"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={busy}
+            title="Выбрать файлы"
+          >
+            +
+          </button>
+        }
       >
-        <span className="shots-tab-label">SHOTS</span>
-      </button>
-
-      {open && <div className="shots-scrim" onClick={() => close()} />}
-
-      <aside className={`shots-panel ${open ? 'shots-panel-open' : ''}`} aria-hidden={!open}>
-        <header className="shots-header">
-          <h3>SHOTS</h3>
-          <div className="shots-header-actions">
-            <button
-              className="gemini-icon-btn"
-              onClick={() => fileInputRef.current?.click()}
-              disabled={busy}
-              title="Выбрать файлы"
-            >
-              +
-            </button>
-            <button className="gemini-icon-btn" onClick={() => close()} aria-label="Close">
-              ×
-            </button>
-          </div>
-        </header>
-
         <input
           ref={fileInputRef}
           type="file"
@@ -193,11 +166,7 @@ export default function ScreenshotPanel({ projectId, sessionRunning }: Screensho
                     className="btn btn-primary btn-sm"
                     onClick={() => attach(shot)}
                     disabled={!sessionRunning}
-                    title={
-                      sessionRunning
-                        ? 'Вставить путь в промпт агента'
-                        : 'Сессия не запущена'
-                    }
+                    title={sessionRunning ? 'Вставить путь в промпт агента' : 'Сессия не запущена'}
                   >
                     → сессия
                   </button>
@@ -211,7 +180,7 @@ export default function ScreenshotPanel({ projectId, sessionRunning }: Screensho
                   >
                     путь
                   </button>
-                  <button className="gemini-icon-btn" onClick={() => drop(shot)} title="Удалить">
+                  <button className="drawer-icon-btn" onClick={() => drop(shot)} title="Удалить">
                     ×
                   </button>
                 </div>
@@ -219,7 +188,7 @@ export default function ScreenshotPanel({ projectId, sessionRunning }: Screensho
             ))}
           </div>
         </div>
-      </aside>
+      </Drawer>
 
       {preview && (
         <div className="shots-lightbox" onClick={() => setPreview(null)}>

@@ -1776,16 +1776,21 @@ button.nav-link {
   }
 }
 
-/* ============ CHAT DRAWERS (left) — Gemini, Claude, project chat ============ */
+/* ============ DRAWERS — Gemini / Claude / project chat (left), shots (right) ============ */
 
-/* One drawer per assistant: same shell, own accent and own slot on the left edge. */
-.chat-tab-gemini, .chat-panel-gemini { --chat-accent: var(--magenta); --chat-glow: var(--glow-magenta); }
-.chat-tab-claude, .chat-panel-claude { --chat-accent: var(--cyan); --chat-glow: var(--glow-cyan); }
-.chat-tab-project, .chat-panel-project { --chat-accent: var(--brass); --chat-glow: var(--glow-brass); }
+/* One drawer per panel: same shell, own accent and own slot on its edge. */
+.drawer-gemini { --drawer-accent: var(--magenta); --drawer-glow: var(--glow-magenta); --tab-slot: calc(-1 * var(--tab-height)); }
+.drawer-claude { --drawer-accent: var(--cyan); --drawer-glow: var(--glow-cyan); --tab-slot: 0px; }
+.drawer-project { --drawer-accent: var(--brass); --drawer-glow: var(--glow-brass); --tab-slot: var(--tab-height); }
+.drawer-shots { --drawer-accent: var(--cyan); --drawer-glow: var(--glow-cyan); }
 
-.chat-tab {
+/* The side a drawer lives on decides its width, and the tab shares it — an open
+   tab sits exactly beside its panel. Both classes land on both elements. */
+.drawer-left { --drawer-width: 380px; }
+.drawer-right { --drawer-width: 420px; }
+
+.drawer-tab {
   position: fixed;
-  left: 0;
   top: 50%;
   /* Slots are stacked around the middle of the edge; a fixed height keeps them
      from touching whatever the label's length turns out to be. */
@@ -1797,33 +1802,28 @@ button.nav-link {
   padding: 0 7px;
   background: rgba(9, 12, 24, 0.9);
   border: 1px solid var(--line-strong);
-  border-left: none;
-  color: var(--chat-accent);
+  color: var(--drawer-accent);
   cursor: pointer;
-  transition: left 0.25s cubic-bezier(0.2, 0.9, 0.3, 1), color 0.15s, box-shadow 0.15s;
+  transition: left 0.25s cubic-bezier(0.2, 0.9, 0.3, 1),
+    right 0.25s cubic-bezier(0.2, 0.9, 0.3, 1), color 0.15s, box-shadow 0.15s;
 }
 
-.chat-tab:hover {
-  box-shadow: var(--chat-glow);
-}
+.drawer-tab.drawer-left { left: 0; border-left: none; }
+.drawer-tab.drawer-right { right: 0; border-right: none; }
+.drawer-tab-open.drawer-left { left: var(--drawer-width); }
+.drawer-tab-open.drawer-right { right: var(--drawer-width); }
 
-/* Placed after `.chat-tab` — same specificity, so source order decides. */
-.chat-tab-gemini { --tab-slot: calc(-1 * var(--tab-height)); }
-.chat-tab-claude { --tab-slot: 0px; }
-.chat-tab-project { --tab-slot: var(--tab-height); }
-
-.chat-tab-open {
-  left: 380px;
+.drawer-tab:hover {
+  box-shadow: var(--drawer-glow);
 }
 
 /* Табы лежат поверх панелей (z-index выше), поэтому чужие прячем, пока одна
    открыта — иначе они перекрывают её содержимое. */
-body:has(.chat-panel-open, .shots-panel-open) .chat-tab:not(.chat-tab-open),
-body:has(.chat-panel-open, .shots-panel-open) .shots-tab:not(.shots-tab-open) {
+body:has(.drawer-open) .drawer-tab:not(.drawer-tab-open) {
   display: none;
 }
 
-.chat-tab-label {
+.drawer-tab-label {
   display: block;
   writing-mode: vertical-rl;
   font-family: var(--font-display);
@@ -1832,7 +1832,7 @@ body:has(.chat-panel-open, .shots-panel-open) .shots-tab:not(.shots-tab-open) {
   letter-spacing: 3px;
 }
 
-.chat-scrim {
+.drawer-scrim {
   position: fixed;
   inset: 0;
   z-index: 180;
@@ -1840,27 +1840,27 @@ body:has(.chat-panel-open, .shots-panel-open) .shots-tab:not(.shots-tab-open) {
   backdrop-filter: blur(2px);
 }
 
-.chat-panel {
+.drawer {
   position: fixed;
-  left: 0;
   top: 0;
   bottom: 0;
-  width: 380px;
+  width: var(--drawer-width);
   z-index: 185;
   display: flex;
   flex-direction: column;
   background: linear-gradient(180deg, var(--bg-2), var(--bg-1));
-  border-right: 1px solid var(--line-strong);
-  transform: translateX(-100%);
   transition: transform 0.25s cubic-bezier(0.2, 0.9, 0.3, 1);
 }
 
-.chat-panel-open {
-  transform: translateX(0);
-  box-shadow: 6px 0 40px rgba(0, 0, 0, 0.6), var(--chat-glow);
-}
+.drawer.drawer-left { left: 0; border-right: 1px solid var(--line-strong); transform: translateX(-100%); }
+.drawer.drawer-right { right: 0; border-left: 1px solid var(--line-strong); transform: translateX(100%); }
 
-.chat-header {
+/* Same specificity as the two rules above, so source order decides. */
+.drawer.drawer-open { transform: translateX(0); }
+.drawer-left.drawer-open { box-shadow: 6px 0 40px rgba(0, 0, 0, 0.6), var(--drawer-glow); }
+.drawer-right.drawer-open { box-shadow: -6px 0 40px rgba(0, 0, 0, 0.6), var(--drawer-glow); }
+
+.drawer-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -1869,14 +1869,14 @@ body:has(.chat-panel-open, .shots-panel-open) .shots-tab:not(.shots-tab-open) {
   border-bottom: 1px solid var(--line);
 }
 
-.chat-header h3 {
+.drawer-header h3 {
   font-family: var(--font-display);
   font-size: 0.85rem;
   letter-spacing: 2px;
-  color: var(--chat-accent);
+  color: var(--drawer-accent);
 }
 
-.chat-header-actions {
+.drawer-header-actions {
   display: flex;
   align-items: center;
   gap: 6px;
@@ -1901,8 +1901,8 @@ body:has(.chat-panel-open, .shots-panel-open) .shots-tab:not(.shots-tab-open) {
 }
 
 .chat-engine-on {
-  color: var(--chat-accent);
-  border-color: var(--chat-accent);
+  color: var(--drawer-accent);
+  border-color: var(--drawer-accent);
 }
 
 .chat-engine:disabled {
@@ -1920,7 +1920,7 @@ body:has(.chat-panel-open, .shots-panel-open) .shots-tab:not(.shots-tab-open) {
   cursor: pointer;
 }
 
-.chat-icon-btn {
+.drawer-icon-btn {
   padding: 2px 7px;
   font-size: 1rem;
   line-height: 1;
@@ -1931,12 +1931,12 @@ body:has(.chat-panel-open, .shots-panel-open) .shots-tab:not(.shots-tab-open) {
   transition: color 0.15s, border-color 0.15s;
 }
 
-.chat-icon-btn:hover:not(:disabled) {
+.drawer-icon-btn:hover:not(:disabled) {
   color: var(--cyan);
   border-color: var(--line);
 }
 
-.chat-icon-btn:disabled {
+.drawer-icon-btn:disabled {
   opacity: 0.3;
   cursor: default;
 }
@@ -1984,7 +1984,7 @@ body:has(.chat-panel-open, .shots-panel-open) .shots-tab:not(.shots-tab-open) {
 .chat-msg-model {
   color: var(--text);
   background: var(--bg-3);
-  border-left: 2px solid var(--chat-accent);
+  border-left: 2px solid var(--drawer-accent);
 }
 
 .chat-msg-error {
@@ -2022,7 +2022,7 @@ body:has(.chat-panel-open, .shots-panel-open) .shots-tab:not(.shots-tab-open) {
   font-family: var(--font-display);
   font-size: 0.84rem;
   letter-spacing: 1px;
-  color: var(--chat-accent);
+  color: var(--drawer-accent);
 }
 
 .md-body ul,
@@ -2035,7 +2035,7 @@ body:has(.chat-panel-open, .shots-panel-open) .shots-tab:not(.shots-tab-open) {
 }
 
 .md-body strong {
-  color: var(--chat-accent);
+  color: var(--drawer-accent);
   font-weight: 700;
 }
 
@@ -2102,7 +2102,7 @@ body:has(.chat-panel-open, .shots-panel-open) .shots-tab:not(.shots-tab-open) {
   height: 1em;
   margin-left: 2px;
   vertical-align: text-bottom;
-  background: var(--chat-accent);
+  background: var(--drawer-accent);
   animation: chat-blink 1s step-end infinite;
 }
 
@@ -2173,17 +2173,20 @@ body:has(.chat-panel-open, .shots-panel-open) .shots-tab:not(.shots-tab-open) {
 
 .chat-input:focus {
   outline: none;
-  border-color: var(--chat-accent);
-  box-shadow: var(--chat-glow);
+  border-color: var(--drawer-accent);
+  box-shadow: var(--drawer-glow);
 }
 
 .chat-composer .btn {
   align-self: flex-end;
 }
 
+/* A full-width panel leaves no room beside it, so the open tab moves to the
+   opposite edge instead of off-screen. */
 @media (max-width: 640px) {
-  .chat-panel { width: 100%; }
-  .chat-tab-open { left: auto; right: 0; border-right: none; border-left: 1px solid var(--line-strong); }
+  .drawer-left, .drawer-right { --drawer-width: 100%; }
+  .drawer-tab-open.drawer-left { left: auto; right: 0; border-right: none; border-left: 1px solid var(--line-strong); }
+  .drawer-tab-open.drawer-right { right: auto; left: 0; border-left: none; border-right: 1px solid var(--line-strong); }
 }
 
 /* ============ SITE FOOTER (repo + donate) ============ */
@@ -2244,89 +2247,7 @@ body:has(.chat-panel-open, .shots-panel-open) .shots-tab:not(.shots-tab-open) {
   text-align: center;
 }
 
-/* ============ SCREENSHOTS PANEL (right drawer) ============ */
-
-.shots-tab {
-  position: fixed;
-  right: 0;
-  top: 50%;
-  transform: translateY(-50%);
-  z-index: 190;
-  padding: 18px 7px;
-  background: rgba(9, 12, 24, 0.9);
-  border: 1px solid var(--line-strong);
-  border-right: none;
-  color: var(--cyan);
-  cursor: pointer;
-  transition: right 0.25s cubic-bezier(0.2, 0.9, 0.3, 1), color 0.15s, box-shadow 0.15s;
-}
-
-.shots-tab:hover {
-  box-shadow: var(--glow-cyan);
-}
-
-.shots-tab-open {
-  right: 420px;
-}
-
-.shots-tab-label {
-  display: block;
-  writing-mode: vertical-rl;
-  font-family: var(--font-display);
-  font-size: 0.7rem;
-  font-weight: 700;
-  letter-spacing: 3px;
-}
-
-.shots-scrim {
-  position: fixed;
-  inset: 0;
-  z-index: 180;
-  background: rgba(2, 3, 8, 0.55);
-  backdrop-filter: blur(2px);
-}
-
-.shots-panel {
-  position: fixed;
-  right: 0;
-  top: 0;
-  bottom: 0;
-  width: 420px;
-  z-index: 185;
-  display: flex;
-  flex-direction: column;
-  background: linear-gradient(180deg, var(--bg-2), var(--bg-1));
-  border-left: 1px solid var(--line-strong);
-  transform: translateX(100%);
-  transition: transform 0.25s cubic-bezier(0.2, 0.9, 0.3, 1);
-}
-
-.shots-panel-open {
-  transform: translateX(0);
-  box-shadow: -6px 0 40px rgba(0, 0, 0, 0.6), 0 0 24px rgba(0, 240, 255, 0.1);
-}
-
-.shots-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 14px 16px;
-  border-bottom: 1px solid var(--line);
-}
-
-.shots-header h3 {
-  font-family: var(--font-display);
-  font-size: 0.85rem;
-  letter-spacing: 2px;
-  color: var(--cyan);
-}
-
-.shots-header-actions {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
+/* ============ SCREENSHOTS PANEL (contents of the right drawer) ============ */
 
 .shots-body {
   flex: 1;
@@ -2409,11 +2330,4 @@ body:has(.chat-panel-open, .shots-panel-open) .shots-tab:not(.shots-tab-open) {
   max-height: 100%;
   object-fit: contain;
   border: 1px solid var(--line-strong);
-}
-
-@media (max-width: 640px) {
-  .shots-panel { width: 100%; }
-  /* A full-width panel leaves no room to the right of it, so the tab moves to the
-     other edge instead of off-screen. */
-  .shots-tab-open { right: auto; left: 0; border-left: none; border-right: 1px solid var(--line-strong); }
 }
