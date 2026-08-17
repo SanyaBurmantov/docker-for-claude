@@ -49,6 +49,11 @@ function parseFindings(review: string): string[] {
     .map((line) => line.trim().replace(/^[-*]\s*/, ''))
 }
 
+/** Готовая задача для кнопки «Улучшить последнее» в модалке «With task…». */
+const POLISH_LAST_PROMPT =
+  'Посмотри последние 10 коммитов, нужно провести ревью и сделать всё человекочитаемым, ' +
+  'лаконичным, по принципам DRY, KISS, YAGNI.'
+
 const DEFAULT_AGENT: AgentId = 'claude'
 
 /** The agent is a per-project habit, so it survives a reload of that project. */
@@ -902,6 +907,13 @@ export default function ProjectPage() {
               onChange={(e) => setTaskPrompt(e.target.value)}
             />
             <MicButton onText={(t) => setTaskPrompt((v) => (v ? `${v} ${t}` : t))} />
+            <button
+              className="btn btn-secondary btn-sm"
+              onClick={() => setTaskPrompt(POLISH_LAST_PROMPT)}
+              title="Подставить готовую задачу на ревью последних коммитов"
+            >
+              Улучшить последнее
+            </button>
           </div>
           <label className="checkbox-field">
             <input
