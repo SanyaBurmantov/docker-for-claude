@@ -9,6 +9,7 @@ import {
 } from '../services/api'
 import { copyText } from '../services/clipboard'
 import { useToast } from './Toast'
+import { useDrawer } from '../hooks/useDrawer'
 
 interface ScreenshotPanelProps {
   projectId: string
@@ -25,7 +26,7 @@ function humanSize(bytes: number): string {
  * into the project root, then hand its path to the running agent in one click.
  */
 export default function ScreenshotPanel({ projectId, sessionRunning }: ScreenshotPanelProps) {
-  const [open, setOpen] = useState(false)
+  const { open, close, toggle } = useDrawer('shots')
   const [shots, setShots] = useState<Screenshot[]>([])
   const [busy, setBusy] = useState(false)
   const [dragging, setDragging] = useState(false)
@@ -66,11 +67,11 @@ export default function ScreenshotPanel({ projectId, sessionRunning }: Screensho
     function onKey(e: KeyboardEvent) {
       if (e.key === 'Escape' && open) {
         if (preview) setPreview(null)
-        else setOpen(false)
+        else close()
       }
       if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 's') {
         e.preventDefault()
-        setOpen((v) => !v)
+        toggle()
       }
     }
     window.addEventListener('keydown', onKey)
@@ -114,14 +115,14 @@ export default function ScreenshotPanel({ projectId, sessionRunning }: Screensho
     <>
       <button
         className={`shots-tab ${open ? 'shots-tab-open' : ''}`}
-        onClick={() => setOpen((v) => !v)}
+        onClick={() => toggle()}
         title="Скриншоты (Ctrl+Shift+S)"
         aria-label="Toggle screenshots panel"
       >
         <span className="shots-tab-label">SHOTS</span>
       </button>
 
-      {open && <div className="shots-scrim" onClick={() => setOpen(false)} />}
+      {open && <div className="shots-scrim" onClick={() => close()} />}
 
       <aside className={`shots-panel ${open ? 'shots-panel-open' : ''}`} aria-hidden={!open}>
         <header className="shots-header">
@@ -135,7 +136,7 @@ export default function ScreenshotPanel({ projectId, sessionRunning }: Screensho
             >
               +
             </button>
-            <button className="gemini-icon-btn" onClick={() => setOpen(false)} aria-label="Close">
+            <button className="gemini-icon-btn" onClick={() => close()} aria-label="Close">
               ×
             </button>
           </div>

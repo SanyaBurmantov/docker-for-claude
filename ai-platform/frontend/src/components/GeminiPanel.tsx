@@ -1,18 +1,20 @@
 import { useEffect, useRef, useState } from 'react'
 import MicButton from './MicButton'
+import Markdown from './Markdown'
 import {
   fetchGeminiStatus,
   streamGeminiChat,
   GeminiMessage,
   GeminiStatus,
 } from '../services/api'
+import { useDrawer } from '../hooks/useDrawer'
 
 interface ChatEntry extends GeminiMessage {
   error?: boolean
 }
 
 export default function GeminiPanel() {
-  const [open, setOpen] = useState(false)
+  const { open, close, toggle } = useDrawer('gemini')
   const [status, setStatus] = useState<GeminiStatus | null>(null)
   const [model, setModel] = useState('')
   const [entries, setEntries] = useState<ChatEntry[]>([])
@@ -42,11 +44,11 @@ export default function GeminiPanel() {
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape' && open) setOpen(false)
+      if (e.key === 'Escape' && open) close()
       // Ctrl+Shift+G toggles from anywhere, including inside the terminal
       if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'g') {
         e.preventDefault()
-        setOpen((v) => !v)
+        toggle()
       }
     }
     window.addEventListener('keydown', onKey)
@@ -110,14 +112,14 @@ export default function GeminiPanel() {
     <>
       <button
         className={`chat-tab chat-tab-gemini ${open ? 'chat-tab-open' : ''}`}
-        onClick={() => setOpen((v) => !v)}
+        onClick={() => toggle()}
         title="Gemini (Ctrl+Shift+G)"
         aria-label="Toggle Gemini panel"
       >
         <span className="chat-tab-label">GEMINI</span>
       </button>
 
-      {open && <div className="chat-scrim" onClick={() => setOpen(false)} />}
+      {open && <div className="chat-scrim" onClick={() => close()} />}
 
       <aside className={`chat-panel chat-panel-gemini ${open ? 'chat-panel-open' : ''}`} aria-hidden={!open}>
         <header className="chat-header">
@@ -143,7 +145,7 @@ export default function GeminiPanel() {
             >
               ⌫
             </button>
-            <button className="chat-icon-btn" onClick={() => setOpen(false)} aria-label="Close">
+            <button className="chat-icon-btn" onClick={() => close()} aria-label="Close">
               ×
             </button>
           </div>
@@ -171,7 +173,7 @@ export default function GeminiPanel() {
               key={i}
               className={`chat-msg chat-msg-${entry.role} ${entry.error ? 'chat-msg-error' : ''}`}
             >
-              {entry.text}
+              {entry.role === 'model' && !entry.error ? <Markdown text={entry.text} /> : entry.text}
               {streaming && i === entries.length - 1 && entry.role === 'model' && (
                 <span className="chat-caret" />
               )}

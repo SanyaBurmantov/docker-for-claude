@@ -33,6 +33,9 @@
   --glow-red: 0 0 12px rgba(255, 59, 92, 0.3);
   --glow-brass: 0 0 12px rgba(232, 176, 75, 0.3);
 
+  /* Height of one drawer tab on the screen edge — also the step between them. */
+  --tab-height: 118px;
+
   --font-display: 'Orbitron', 'Exo 2', sans-serif;
   --font-ui: 'Exo 2', -apple-system, 'Segoe UI', Roboto, sans-serif;
   --font-mono: 'JetBrains Mono', 'Consolas', 'Monaco', monospace;
@@ -1704,16 +1707,18 @@ button.nav-link {
 .chat-tab-claude, .chat-panel-claude { --chat-accent: var(--cyan); --chat-glow: var(--glow-cyan); }
 .chat-tab-project, .chat-panel-project { --chat-accent: var(--brass); --chat-glow: var(--glow-brass); }
 
-.chat-tab-claude { top: calc(50% - 104px); }
-.chat-tab-project { top: calc(50% + 104px); }
-
 .chat-tab {
   position: fixed;
   left: 0;
   top: 50%;
-  transform: translateY(-50%);
+  /* Slots are stacked around the middle of the edge; a fixed height keeps them
+     from touching whatever the label's length turns out to be. */
+  height: var(--tab-height);
+  transform: translateY(calc(-50% + var(--tab-slot, 0px)));
+  display: flex;
+  align-items: center;
   z-index: 190;
-  padding: 18px 7px;
+  padding: 0 7px;
   background: rgba(9, 12, 24, 0.9);
   border: 1px solid var(--line-strong);
   border-left: none;
@@ -1725,6 +1730,11 @@ button.nav-link {
 .chat-tab:hover {
   box-shadow: var(--chat-glow);
 }
+
+/* Placed after `.chat-tab` — same specificity, so source order decides. */
+.chat-tab-gemini { --tab-slot: calc(-1 * var(--tab-height)); }
+.chat-tab-claude { --tab-slot: 0px; }
+.chat-tab-project { --tab-slot: var(--tab-height); }
 
 .chat-tab-open {
   left: 380px;
@@ -1900,6 +1910,107 @@ button.nav-link {
   border-left-color: var(--red);
   font-family: var(--font-mono);
   font-size: 0.74rem;
+}
+
+/* Rendered markdown inside a chat bubble. The bubble keeps `pre-wrap` for the raw
+   text of user messages, so the rendered half turns it back off — the blocks below
+   already carry the line breaks. */
+.md-body {
+  white-space: normal;
+}
+
+.md-body > :first-child { margin-top: 0; }
+.md-body > :last-child { margin-bottom: 0; }
+
+.md-body p,
+.md-body ul,
+.md-body ol,
+.md-body pre,
+.md-body blockquote,
+.md-body table {
+  margin: 0 0 8px;
+}
+
+.md-body h1,
+.md-body h2,
+.md-body h3,
+.md-body h4 {
+  margin: 12px 0 6px;
+  font-family: var(--font-display);
+  font-size: 0.84rem;
+  letter-spacing: 1px;
+  color: var(--chat-accent);
+}
+
+.md-body ul,
+.md-body ol {
+  padding-left: 20px;
+}
+
+.md-body li {
+  margin: 2px 0;
+}
+
+.md-body strong {
+  color: var(--chat-accent);
+  font-weight: 700;
+}
+
+.md-body em {
+  color: var(--text-dim);
+}
+
+.md-body code {
+  padding: 1px 4px;
+  font-family: var(--font-mono);
+  font-size: 0.76rem;
+  color: var(--brass);
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid var(--line);
+}
+
+.md-body pre {
+  padding: 8px 10px;
+  overflow-x: auto;
+  background: var(--bg-terminal);
+  border: 1px solid var(--line);
+}
+
+/* Inside a block the border and background belong to the <pre>, not each line. */
+.md-body pre code {
+  padding: 0;
+  color: var(--text);
+  background: none;
+  border: none;
+}
+
+.md-body blockquote {
+  padding-left: 10px;
+  color: var(--text-dim);
+  border-left: 2px solid var(--line-strong);
+}
+
+.md-body a {
+  color: var(--cyan);
+}
+
+.md-body table {
+  border-collapse: collapse;
+  display: block;
+  overflow-x: auto;
+}
+
+.md-body th,
+.md-body td {
+  padding: 3px 8px;
+  border: 1px solid var(--line);
+  text-align: left;
+}
+
+.md-body hr {
+  margin: 10px 0;
+  border: none;
+  border-top: 1px solid var(--line);
 }
 
 .chat-caret {
@@ -2219,9 +2330,9 @@ button.nav-link {
 
 @media (max-width: 640px) {
   .shots-panel { width: 100%; }
-  /* The Gemini tab flips to this edge on a narrow screen, so at dead centre the two
-     would sit on top of each other. */
-  .shots-tab { top: calc(50% + 92px); }
+  /* An open chat drawer flips its tab to this edge, and a full-width panel hides
+     everything behind it anyway, so the screenshots tab steps aside. */
+  body:has(.chat-panel-open) .shots-tab { display: none; }
   /* A full-width panel leaves no room to the right of it, so the tab moves to the
      other edge instead of off-screen. */
   .shots-tab-open { right: auto; left: 0; border-left: none; border-right: 1px solid var(--line-strong); }

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import MicButton from './MicButton'
+import Markdown from './Markdown'
 import {
   fetchChatStatus,
   streamChat,
@@ -7,6 +8,7 @@ import {
   ChatStatus,
   GeminiMessage,
 } from '../services/api'
+import { useDrawer } from '../hooks/useDrawer'
 
 interface ChatEntry extends GeminiMessage {
   error?: boolean
@@ -23,7 +25,13 @@ interface Props {
  * (`sessionId` + `resume`) instead of being resent, so long conversations stay cheap.
  */
 export default function ChatPanel({ projectId }: Props) {
-  const [open, setOpen] = useState(false)
+  // Ctrl+Shift+K for the global chat, Ctrl+Shift+J for the project one — both
+  // reachable while the terminal has focus.
+  const hotkey = projectId ? 'j' : 'k'
+  const variant = projectId ? 'project' : 'claude'
+  const label = projectId ? 'ПРОЕКТ' : 'CLAUDE'
+
+  const { open, close, toggle } = useDrawer(variant)
   const [status, setStatus] = useState<ChatStatus | null>(null)
   const [engine, setEngine] = useState<ChatEngine>('claude')
   const [model, setModel] = useState('')
@@ -37,12 +45,6 @@ export default function ChatPanel({ projectId }: Props) {
   // Names the Claude conversation; a fresh id starts a fresh one.
   const sessionRef = useRef(crypto.randomUUID())
   const startedRef = useRef(false)
-
-  // Ctrl+Shift+K for the global chat, Ctrl+Shift+J for the project one — both
-  // reachable while the terminal has focus.
-  const hotkey = projectId ? 'j' : 'k'
-  const variant = projectId ? 'project' : 'claude'
-  const label = projectId ? 'ПРОЕКТ' : 'CLAUDE'
 
   useEffect(() => {
     fetchChatStatus(projectId)
@@ -63,10 +65,10 @@ export default function ChatPanel({ projectId }: Props) {
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape' && open) setOpen(false)
+      if (e.key === 'Escape' && open) close()
       if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === hotkey) {
         e.preventDefault()
-        setOpen((v) => !v)
+        toggle()
       }
     }
     window.addEventListener('keydown', onKey)
@@ -151,14 +153,14 @@ export default function ChatPanel({ projectId }: Props) {
     <>
       <button
         className={`chat-tab chat-tab-${variant} ${open ? 'chat-tab-open' : ''}`}
-        onClick={() => setOpen((v) => !v)}
+        onClick={() => toggle()}
         title={`${label} (Ctrl+Shift+${hotkey.toUpperCase()})`}
         aria-label={`Toggle ${label} chat panel`}
       >
         <span className="chat-tab-label">{label}</span>
       </button>
 
-      {open && <div className="chat-scrim" onClick={() => setOpen(false)} />}
+      {open && <div className="chat-scrim" onClick={() => close()} />}
 
       <aside className={`chat-panel chat-panel-${variant} ${open ? 'chat-panel-open' : ''}`} aria-hidden={!open}>
         <header className="chat-header">
@@ -198,7 +200,7 @@ export default function ChatPanel({ projectId }: Props) {
             >
               ⌫
             </button>
-            <button className="chat-icon-btn" onClick={() => setOpen(false)} aria-label="Close">
+            <button className="chat-icon-btn" onClick={() => close()} aria-label="Close">
               ×
             </button>
           </div>
@@ -219,7 +221,7 @@ export default function ChatPanel({ projectId }: Props) {
               key={i}
               className={`chat-msg chat-msg-${entry.role} ${entry.error ? 'chat-msg-error' : ''}`}
             >
-              {entry.text}
+              {entry.role === 'model' && !entry.error ? <Markdown text={entry.text} /> : entry.text}
               {streaming && i === entries.length - 1 && entry.role === 'model' && (
                 <span className="chat-caret" />
               )}
