@@ -80,6 +80,8 @@ export interface AgentInfo {
   label: string;
   version: string;
   supportsPrompt: boolean;
+  /** Whether the agent can reopen its previous conversation. */
+  supportsContinue: boolean;
 }
 
 // An agent is "available" only if its binary answers --version inside the
@@ -101,7 +103,13 @@ router.get('/agents', async (_req, res) => {
       // container down — report it as not installed rather than failing the page
     }
     if (version) {
-      agents.push({ id: id as AgentId, label: spec.label, version, supportsPrompt: spec.supportsPrompt });
+      agents.push({
+        id: id as AgentId,
+        label: spec.label,
+        version,
+        supportsPrompt: spec.supportsPrompt,
+        supportsContinue: Boolean(spec.continueFlag),
+      });
     }
   }
 

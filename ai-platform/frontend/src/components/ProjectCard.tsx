@@ -50,7 +50,7 @@ export default function ProjectCard({ project, sessionRunning, attention, onOpen
       </div>
       <div className="project-actions">
         <button className="btn btn-primary btn-sm" onClick={onOpen}>
-          Open with Claude
+          Open
         </button>
         <button className="btn btn-danger btn-sm" onClick={onDelete}>
           Delete

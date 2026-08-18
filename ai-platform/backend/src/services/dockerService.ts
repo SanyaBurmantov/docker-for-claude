@@ -70,6 +70,16 @@ export function tmuxSessionName(projectName: string, prefix: string = 'claude'):
   return `${prefix}-${projectName.replace(/[^A-Za-z0-9_-]/g, '_')}`;
 }
 
+/**
+ * Names of the tmux sessions alive in the container. One call answers "what is
+ * running" for every agent of every project — cheaper than a has-session probe
+ * per agent, which is what the project page and the dashboard would otherwise do.
+ */
+export async function listTmuxSessions(containerName: string): Promise<string[]> {
+  const out = await execInContainer(containerName, "tmux list-sessions -F '#S' 2>/dev/null || true");
+  return out.split('\n').map((line) => line.trim()).filter(Boolean);
+}
+
 export async function containerExists(containerName: string): Promise<boolean> {
   try {
     const containers = await docker.listContainers({ all: true });

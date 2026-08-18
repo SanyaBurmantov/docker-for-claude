@@ -1,8 +1,8 @@
 import { randomUUID } from 'crypto';
 import { Router, type Request, type Response } from 'express';
-import { execInContainer, execInContainerSync, pasteIntoSession, tmuxSessionName } from '../services/dockerService';
+import { execInContainer, listTmuxSessions, pasteIntoSession, tmuxSessionName } from '../services/dockerService';
 import { isValidProjectName } from '../services/projectService';
-import { AGENTS, DEFAULT_AGENT, isAgentId, type AgentId } from '../services/agents';
+import { AGENTS, AGENT_IDS, DEFAULT_AGENT, isAgentId, type AgentId } from '../services/agents';
 import { getAll, metaFor, update } from '../services/metadataService';
 
 const router = Router({ mergeParams: true });
@@ -17,22 +17,35 @@ router.use((req, res, next) => {
   next();
 });
 
+/**
+ * Every agent gets its own tmux session in the project — `claude-<project>`,
+ * `codex-<project>` and so on — so the page can show them side by side as tabs
+ * and each can be started and stopped without touching the others. Claude keeps
+ * the historical name, which is also the name a session started before this
+ * change already has.
+ */
+function sessionNameFor(projectName: string, agent: AgentId): string {
+  return tmuxSessionName(projectName, agent);
+}
+
+/** The agent a request is about; absent means Claude, as it did before agents were a choice. */
+function agentOf(value: unknown): AgentId | null {
+  if (value === undefined || value === null || value === '') return DEFAULT_AGENT;
+  return isAgentId(value) ? value : null;
+}
+
 router.post('/start', async (req: Request<{ id: string }>, res: Response) => {
   try {
     const projectName = req.params.id;
-
-    // The tmux session keeps its historical "claude-" name whichever agent runs
-    // inside it: the terminal tab, the running-status probe and the stop button
-    // all address the session by that name.
-    const sessionName = tmuxSessionName(projectName);
     const { mode, prompt, agent } = (req.body ?? {}) as { mode?: string; prompt?: string; agent?: string };
 
-    if (agent !== undefined && !isAgentId(agent)) {
+    const agentId = agentOf(agent);
+    if (!agentId) {
       res.status(400).json({ error: `Unknown agent: ${agent}` });
       return;
     }
-    const agentId: AgentId = agent ?? DEFAULT_AGENT;
     const spec = AGENTS[agentId];
+    const sessionName = sessionNameFor(projectName, agentId);
 
     const task = typeof prompt === 'string' ? prompt.trim() : '';
     if (task && !spec.supportsPrompt) {
@@ -53,7 +66,7 @@ router.post('/start', async (req: Request<{ id: string }>, res: Response) => {
       if (mode === 'continue' && priorSessionId) {
         agentCmd += ` ${spec.resumeFlag} ${priorSessionId}`;
         sessionId = priorSessionId;
-      } else if (mode === 'continue') {
+      } else if (mode === 'continue' && spec.continueFlag) {
         // A session started before we recorded ids: we cannot name it, so fall
         // back to the continue flag.
         agentCmd += ` ${spec.continueFlag}`;
@@ -61,7 +74,7 @@ router.post('/start', async (req: Request<{ id: string }>, res: Response) => {
         sessionId = randomUUID();
         agentCmd += ` ${spec.sessionIdFlag} ${sessionId}`;
       }
-    } else if (mode === 'continue') {
+    } else if (mode === 'continue' && spec.continueFlag) {
       agentCmd += ` ${spec.continueFlag}`;
     }
 
@@ -70,69 +83,81 @@ router.post('/start', async (req: Request<{ id: string }>, res: Response) => {
     if (task) {
       const b64 = Buffer.from(task, 'utf-8').toString('base64');
       const promptFile = `/tmp/.prompt-${sessionName}`;
+      const promptArg = spec.promptFlag ? ` ${spec.promptFlag}` : '';
       startCmd =
         `printf '%s' '${b64}' | base64 -d > ${promptFile} && ` +
-        `tmux new-session -d -s ${sessionName} '${agentCmd} "$(cat ${promptFile}; rm -f ${promptFile})"'`;
+        `tmux new-session -d -s ${sessionName} '${agentCmd}${promptArg} "$(cat ${promptFile}; rm -f ${promptFile})"'`;
     }
 
-    // Attach-or-create: an existing session is left alone, whatever agent runs in
-    // it. Saying "STARTED" only when one was created keeps the recorded agent —
-    // and the badge the UI draws from it — honest about what is really running.
+    // Attach-or-create: an existing session is left alone. Its name already says
+    // which agent runs in it, so nothing has to be guessed about it.
     const cmd =
       `cd /workspace/${projectName} && ` +
       `if tmux has-session -t ${sessionName} 2>/dev/null; then echo EXISTS; else ${startCmd} && echo STARTED; fi`;
     const started = (await execInContainer(CONTAINER_NAME, cmd)).trim().endsWith('STARTED');
 
-    const runningAgent: AgentId = started ? agentId : isAgentId(meta.agent) ? meta.agent : DEFAULT_AGENT;
-
-    // Only a session we actually created gets its id recorded: an existing one is
-    // left alone, and so is the id already stored for it.
+    // Only Claude can be told its conversation id, so only its sessions record one.
+    // `agent` stays the last one started here — the dashboard opens the project with it.
     if (started) await update(projectName, { agent: agentId, sessionId }).catch(() => {});
-    res.json({ sessionId: `claude-${projectName}`, status: 'started', running: true, agent: runningAgent });
+    res.json({ sessionId: sessionName, status: 'started', running: true, agent: agentId });
   } catch (err) {
     res.status(500).json({ error: String(err) });
   }
 });
 
 router.post('/stop', async (req: Request<{ id: string }>, res: Response) => {
-  try {
-    const projectName = req.params.id;
-    const sessionName = tmuxSessionName(projectName);
-    await execInContainer(CONTAINER_NAME, `tmux kill-session -t ${sessionName}`);
-    res.json({ status: 'stopped', running: false });
-  } catch (err) {
-    res.status(500).json({ error: String(err) });
-  }
-});
-
-router.get('/status', async (req: Request<{ id: string }>, res: Response) => {
-  try {
-    const projectName = req.params.id;
-    const sessionName = tmuxSessionName(projectName);
-    const stored = metaFor(await getAll(), projectName).agent;
-    const agent: AgentId = isAgentId(stored) ? stored : DEFAULT_AGENT;
-
-    try {
-      execInContainerSync(CONTAINER_NAME, `tmux has-session -t ${sessionName}`);
-      res.json({ sessionId: `claude-${projectName}`, running: true, agent });
-    } catch {
-      res.json({ sessionId: null, running: false, agent });
-    }
-  } catch (err) {
-    res.status(500).json({ error: String(err) });
-  }
-});
-
-/** Types dictated (or otherwise composed) text into the agent's pane, without submitting. */
-router.post('/paste', async (req: Request<{ id: string }>, res: Response) => {
-  const { text } = (req.body ?? {}) as { text?: unknown };
-  if (typeof text !== 'string' || !text.trim()) {
-    res.status(400).json({ error: 'text is required' });
+  const agentId = agentOf((req.body ?? {}).agent);
+  if (!agentId) {
+    res.status(400).json({ error: 'Unknown agent' });
     return;
   }
 
   try {
-    const pasted = await pasteIntoSession(CONTAINER_NAME, tmuxSessionName(req.params.id), text);
+    await execInContainer(CONTAINER_NAME, `tmux kill-session -t ${sessionNameFor(req.params.id, agentId)}`);
+    res.json({ status: 'stopped', running: false, agent: agentId });
+  } catch (err) {
+    res.status(500).json({ error: String(err) });
+  }
+});
+
+/** One answer for every agent: the page draws a tab per agent and needs all of them. */
+router.get('/status', async (req: Request<{ id: string }>, res: Response) => {
+  try {
+    const projectName = req.params.id;
+    const live = new Set(await listTmuxSessions(CONTAINER_NAME));
+    const sessions = AGENT_IDS.map((agent) => ({
+      agent,
+      sessionId: sessionNameFor(projectName, agent),
+      running: live.has(sessionNameFor(projectName, agent)),
+    }));
+
+    const stored = metaFor(await getAll(), projectName).agent;
+    res.json({
+      sessions,
+      running: sessions.some((s) => s.running),
+      /** Agent the project was last opened with — the tab the page starts on. */
+      lastAgent: isAgentId(stored) ? stored : DEFAULT_AGENT,
+    });
+  } catch (err) {
+    res.status(500).json({ error: String(err) });
+  }
+});
+
+/** Types dictated (or otherwise composed) text into an agent's pane, without submitting. */
+router.post('/paste', async (req: Request<{ id: string }>, res: Response) => {
+  const { text, agent } = (req.body ?? {}) as { text?: unknown; agent?: unknown };
+  if (typeof text !== 'string' || !text.trim()) {
+    res.status(400).json({ error: 'text is required' });
+    return;
+  }
+  const agentId = agentOf(agent);
+  if (!agentId) {
+    res.status(400).json({ error: 'Unknown agent' });
+    return;
+  }
+
+  try {
+    const pasted = await pasteIntoSession(CONTAINER_NAME, sessionNameFor(req.params.id, agentId), text);
     if (!pasted) {
       res.status(409).json({ error: 'Сессия не запущена — вставлять некуда' });
       return;

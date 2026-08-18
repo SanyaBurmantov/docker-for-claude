@@ -78,6 +78,39 @@ node -e '
   }
 ' "$SETTINGS" || echo "warning: could not add the /screenshots read permission to $SETTINGS"
 
+# opencode.json lives in a volume, so the copy baked into the image only ever seeds
+# a fresh install: a machine set up before the theme was added would keep its old
+# config forever. Whatever the image knows and the volume does not is merged in here
+# — additively, so a provider tweaked by hand or a theme picked with /theme survives. (The default theme borrows the terminal's own ANSI colours, and
+# against the web terminal's near-black background half of opencode turns unreadable.)
+OPENCODE_CONFIG=/home/claude/.config/opencode/opencode.json
+node -e '
+  const fs = require("fs");
+  const path = require("path");
+  const [file, skelFile] = process.argv.slice(1);
+  let config = {};
+  try { config = JSON.parse(fs.readFileSync(file, "utf-8")); } catch {}
+  const skel = JSON.parse(fs.readFileSync(skelFile, "utf-8"));
+
+  let changed = false;
+  if (!config.theme && skel.theme) { config.theme = skel.theme; changed = true; }
+  for (const [name, provider] of Object.entries(skel.provider ?? {})) {
+    const providers = config.provider ?? (config.provider = {});
+    if (!providers[name]) { providers[name] = provider; changed = true; }
+  }
+  if (changed) {
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, JSON.stringify(config, null, 2));
+  }
+' "$OPENCODE_CONFIG" /etc/skel-opencode.json || echo "warning: could not update $OPENCODE_CONFIG"
+
+# Gemini CLI stops on an interactive auth/theme picker when it has no settings file.
+# Seeds the volume the same way as above.
+if [ ! -f /home/claude/.gemini/settings.json ]; then
+  mkdir -p /home/claude/.gemini
+  cp /etc/skel-gemini-settings.json /home/claude/.gemini/settings.json 2>/dev/null || true
+fi
+
 echo "Claude Code container ready"
 echo "Projects are in /workspace"
 echo "Run: claude"

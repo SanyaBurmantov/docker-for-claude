@@ -678,11 +678,16 @@ button.nav-link {
 .terminal-toolbar {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
-  gap: 8px;
+  justify-content: space-between;
   margin-bottom: 8px;
-  /* На узком экране кнопки переносятся, а не выдавливаются за край строки */
   flex-wrap: wrap;
+  gap: 8px;
+}
+
+.terminal-toolbar-left, .terminal-toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .terminal-font-controls {
@@ -694,7 +699,6 @@ button.nav-link {
 .terminal-scroll-controls {
   display: flex;
   gap: 4px;
-  margin-right: auto;
 }
 
 /* Fullscreen: терминал занимает всё окно, тулбар и буфер обмена остаются на месте */
@@ -2330,4 +2334,17 @@ body:has(.drawer-open) .drawer-tab:not(.drawer-tab-open) {
   max-height: 100%;
   object-fit: contain;
   border: 1px solid var(--line-strong);
+}
+
+/* Кнопки сессии живут в тулбаре терминала того агента, к которому относятся */
+.terminal-session-controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-right: auto;
+}
+
+/* Точка «запущен» на вкладке агента */
+.tab .status-indicator {
+  margin-right: 6px;
 }

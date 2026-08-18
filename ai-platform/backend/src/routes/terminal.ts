@@ -1,7 +1,7 @@
 import type { WebSocket } from 'ws';
 import * as pty from 'node-pty';
-import { tmuxSessionName, UTF8_EXEC_ENV, EXEC_USER_ARGS } from '../services/dockerService';
-import { isValidProjectName } from '../services/projectService';
+import { UTF8_EXEC_ENV, EXEC_USER_ARGS } from '../services/dockerService';
+import { paneTarget } from '../services/paneTarget';
 
 interface TerminalMessage {
   type: 'input' | 'resize';
@@ -13,27 +13,19 @@ interface TerminalMessage {
 const CONTAINER_NAME = process.env.CLAUDE_CONTAINER || 'ai-claude';
 
 export function handleTerminalWebSocket(ws: WebSocket, sessionId: string): void {
-  let kind: 'claude' | 'shell' = 'claude';
-  let projectName = sessionId;
-  if (sessionId.startsWith('claude-')) {
-    projectName = sessionId.slice('claude-'.length);
-  } else if (sessionId.startsWith('shell-')) {
-    kind = 'shell';
-    projectName = sessionId.slice('shell-'.length);
-  }
-
-  if (!isValidProjectName(projectName)) {
+  const target = paneTarget(sessionId);
+  if (!target) {
     ws.send(JSON.stringify({ type: 'error', data: 'Invalid session id' }));
     ws.close();
     return;
   }
 
-  // Claude tab: attach to the session started via the API (plain shell if it is gone).
   // Shell tab: attach-or-create a persistent tmux shell session in the project dir.
-  const shellCmd =
-    kind === 'claude'
-      ? `cd /workspace/${projectName} 2>/dev/null; tmux attach-session -t ${tmuxSessionName(projectName)} 2>/dev/null || exec bash -i`
-      : `cd /workspace/${projectName} 2>/dev/null; exec tmux new-session -A -s ${tmuxSessionName(projectName, 'shell')}`;
+  // Everything else: attach to the session the API started — or, once it is gone,
+  // drop into a plain shell in the same directory, where its output still lives.
+  const shellCmd = target.create
+    ? `cd "${target.cwd}" 2>/dev/null; exec tmux new-session -A -s ${target.session}`
+    : `cd "${target.cwd}" 2>/dev/null; tmux attach-session -t ${target.session} 2>/dev/null || exec bash -i`;
 
   let term: pty.IPty | null = null;
 

@@ -3,6 +3,7 @@ import multer from 'multer';
 import { pasteIntoSession, tmuxSessionName } from '../services/dockerService';
 import { isValidProjectName } from '../services/projectService';
 import { list, save, remove, pathOf, agentPathOf, isImage } from '../services/screenshotService';
+import { DEFAULT_AGENT, isAgentId } from '../services/agents';
 
 const router = Router({ mergeParams: true });
 const CONTAINER_NAME = process.env.CLAUDE_CONTAINER || 'ai-claude';
@@ -80,7 +81,9 @@ router.delete('/:name', async (req: Request<{ id: string; name: string }>, res: 
  */
 router.post('/attach', async (req: Request<{ id: string }>, res: Response) => {
   try {
-    const { names } = (req.body ?? {}) as { names?: unknown };
+    // The agent whose tab is open: each has its own session, so "the session" is
+    // only meaningful together with one.
+    const { names, agent } = (req.body ?? {}) as { names?: unknown; agent?: unknown };
     if (!Array.isArray(names) || names.length === 0) {
       res.status(400).json({ error: 'names is required' });
       return;
@@ -96,7 +99,12 @@ router.post('/attach', async (req: Request<{ id: string }>, res: Response) => {
     }
 
     // Trailing space so the user can keep typing after the path.
-    const pasted = await pasteIntoSession(CONTAINER_NAME, tmuxSessionName(req.params.id), `${paths.join(' ')} `);
+    const target = isAgentId(agent) ? agent : DEFAULT_AGENT;
+    const pasted = await pasteIntoSession(
+      CONTAINER_NAME,
+      tmuxSessionName(req.params.id, target),
+      `${paths.join(' ')} `
+    );
     if (!pasted) {
       res.status(409).json({ error: 'Сессия не запущена — вставлять некуда' });
       return;

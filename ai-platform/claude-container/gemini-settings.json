@@ -1,0 +1,6 @@
+{
+  "selectedAuthType": "gemini-api-key",
+  "security": { "auth": { "selectedType": "gemini-api-key" } },
+  "theme": "Default",
+  "hideBanner": true
+}

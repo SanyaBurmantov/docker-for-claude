@@ -7,6 +7,7 @@ import {
   attachScreenshots,
   screenshotUrl,
   Screenshot,
+  AgentId,
 } from '../services/api'
 import { copyText } from '../services/clipboard'
 import { useToast } from './Toast'
@@ -16,6 +17,8 @@ interface ScreenshotPanelProps {
   projectId: string
   /** Whether an agent session is running — nothing to paste into if it is not. */
   sessionRunning: boolean
+  /** Агент открытой вкладки — у каждого своя сессия, вставлять надо именно в неё. */
+  agent: AgentId
 }
 
 function humanSize(bytes: number): string {
@@ -26,7 +29,7 @@ function humanSize(bytes: number): string {
  * The screenshot shelf: paste a mockup or a broken screen here instead of saving it
  * into the project root, then hand its path to the running agent in one click.
  */
-export default function ScreenshotPanel({ projectId, sessionRunning }: ScreenshotPanelProps) {
+export default function ScreenshotPanel({ projectId, sessionRunning, agent }: ScreenshotPanelProps) {
   const drawer = useDrawer('shots')
   const { open } = drawer
   const [shots, setShots] = useState<Screenshot[]>([])
@@ -75,7 +78,7 @@ export default function ScreenshotPanel({ projectId, sessionRunning }: Screensho
 
   async function attach(shot: Screenshot) {
     try {
-      await attachScreenshots(projectId, [shot.name])
+      await attachScreenshots(projectId, [shot.name], agent)
       toast('success', 'Путь вставлен в сессию')
     } catch (err) {
       toast('error', String(err))

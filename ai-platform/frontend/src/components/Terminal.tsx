@@ -4,7 +4,7 @@ import { FitAddon } from 'xterm-addon-fit'
 import { WebLinksAddon } from 'xterm-addon-web-links'
 import { SearchAddon } from 'xterm-addon-search'
 import { useWebSocket } from '../hooks/useWebSocket'
-import { getTmuxBuffer } from '../services/api'
+import { capturePane, getTmuxBuffer, scrollPane } from '../services/api'
 import { copyText } from '../services/clipboard'
 import 'xterm/css/xterm.css'
 
@@ -33,6 +33,9 @@ interface TerminalProps {
   /** Показывается только в полноэкранном режиме — оверлей перекрывает страницу, и без этого
    *  верхнее меню проекта становится недоступным. */
   fullscreenExtra?: ReactNode
+  /** Чей это терминал — вкладок теперь по одной на агента, и подпись у каждой своя. */
+  label?: string
+  searchExtra?: ReactNode
 }
 
 export default function Terminal({
@@ -41,6 +44,8 @@ export default function Terminal({
   visible = true,
   toolbarExtra,
   fullscreenExtra,
+  label = 'Claude AI',
+  searchExtra,
 }: TerminalProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const xtermRef = useRef<XTerm | null>(null)
@@ -165,9 +170,9 @@ export default function Terminal({
     })
 
     setTimeout(() => fitAddon.fit(), 50)
-    term.write('Claude AI Terminal\r\n')
+    term.write(`${label} terminal\r\n`)
     if (!sessionId) {
-      term.write('\x1b[33mSession not started. Click "Start Claude" to begin.\x1b[0m\r\n')
+      term.write('\x1b[33mСессия не запущена — кнопка Start в тулбаре.\x1b[0m\r\n')
     }
 
     xtermRef.current = term
@@ -186,9 +191,9 @@ export default function Terminal({
     if (!xtermRef.current) return
     xtermRef.current.clear()
     if (!sessionId) {
-      xtermRef.current.write('\x1b[33mSession not started. Click "Start Claude" to begin.\x1b[0m\r\n')
+      xtermRef.current.write('\x1b[33mСессия не запущена — кнопка Start в тулбаре.\x1b[0m\r\n')
     } else if (isConnected) {
-      xtermRef.current.write('\x1b[32mConnected to Claude session.\x1b[0m\r\n')
+      xtermRef.current.write(`\x1b[32mПодключено: ${label}.\x1b[0m\r\n`)
       // Sync the server-side pty with the actual terminal size
       fitAddonRef.current?.fit()
       const term = xtermRef.current
@@ -241,7 +246,38 @@ export default function Terminal({
     }
   }
 
-  /** Весь scrollback текстом — выделить мышью 10000 строк нереально. */
+  /**
+   * Кнопки прокрутки. Внутри панели работает tmux, а он рисует на альтернативном
+   * экране: у xterm там нет ни строчки скроллбэка, поэтому его собственные
+   * scrollToTop/scrollToBottom ничего не двигают. Прокручивает copy-mode tmux.
+   */
+  async function scroll(direction: 'up' | 'down' | 'top' | 'bottom') {
+    if (!sessionId) return
+    try {
+      await scrollPane(sessionId, direction)
+    } catch {
+      // Сессии может уже не быть (в панели остался обычный shell) — тогда крутим xterm
+      if (direction === 'top') xtermRef.current?.scrollToTop()
+      if (direction === 'bottom') xtermRef.current?.scrollToBottom()
+    }
+  }
+
+  /** Весь вывод панели текстом — тоже из tmux, xterm видит только текущий экран. */
+  async function pullCapture() {
+    if (!sessionId) {
+      dumpBuffer()
+      return
+    }
+    try {
+      const text = await capturePane(sessionId)
+      if (text.trim()) setClip(text)
+      else dumpBuffer()
+    } catch {
+      dumpBuffer()
+    }
+  }
+
+  /** Запасной вариант: то, что видел сам xterm (без tmux-сессии это всё, что есть). */
   function dumpBuffer() {
     const term = xtermRef.current
     if (!term) return
@@ -259,73 +295,84 @@ export default function Terminal({
     <div className={fullscreen ? 'terminal-wrap terminal-wrap-fullscreen' : 'terminal-wrap'}>
       {fullscreen && fullscreenExtra}
       <div className="terminal-toolbar">
-        {toolbarExtra}
-        <div className="terminal-font-controls">
-          <button
-            className="icon-btn"
-            title="Smaller font"
-            onClick={() => setFontSize((s) => Math.max(8, s - 1))}
-          >
-            A−
-          </button>
-          <button
-            className="icon-btn"
-            title="Larger font"
-            onClick={() => setFontSize((s) => Math.min(24, s + 1))}
-          >
-            A＋
-          </button>
+        <div className="terminal-toolbar-left">
+          {toolbarExtra}
+          {searchExtra}
         </div>
-        <div className="terminal-scroll-controls">
-          <button
-            className="icon-btn"
-            title="В начало вывода"
-            onClick={() => xtermRef.current?.scrollToTop()}
-          >
-            ↑
-          </button>
-          <button
-            className="icon-btn"
-            title="В конец вывода"
-            onClick={() => xtermRef.current?.scrollToBottom()}
-          >
-            ↓
-          </button>
-          <button
-            className="icon-btn"
-            title={fullscreen ? 'Свернуть терминал' : 'Терминал на весь экран'}
-            onClick={() => setFullscreen((f) => !f)}
-          >
-            {fullscreen ? '⤡' : '⤢'}
-          </button>
-        </div>
-        <div className="terminal-search-box">
-          <input
-            ref={searchInputRef}
-            type="text"
-            className="terminal-search"
-            placeholder="Search output (Ctrl+F)…  Enter — next, Shift+Enter — prev"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') runSearch(e.shiftKey)
-              if (e.key === 'Escape') {
-                setSearchQuery('')
-                searchAddonRef.current?.clearDecorations()
-                setSearchResults({ index: -1, count: 0 })
-                xtermRef.current?.focus()
-              }
-            }}
-          />
-          {searchQuery && (
-            <span className="terminal-search-count">
-              {searchResults.count === 0
-                ? 'нет'
-                : searchResults.index < 0
-                  ? `>${searchResults.count}`
-                  : `${searchResults.index + 1} / ${searchResults.count}`}
-            </span>
-          )}
+        <div className="terminal-toolbar-right">
+          <div className="terminal-font-controls">
+            <button
+              className="icon-btn"
+              title="Smaller font"
+              onClick={() => setFontSize((s) => Math.max(8, s - 1))}
+            >
+              A−
+            </button>
+            <button
+              className="icon-btn"
+              title="Larger font"
+              onClick={() => setFontSize((s) => Math.min(24, s + 1))}
+            >
+              A＋
+            </button>
+          </div>
+          <div className="terminal-scroll-controls">
+            <button
+              className="icon-btn"
+              title="В начало вывода (copy-mode tmux)"
+              onClick={() => scroll('top')}
+            >
+              ↑
+            </button>
+            <button className="icon-btn" title="Страницей выше" onClick={() => scroll('up')}>
+              ⇞
+            </button>
+            <button className="icon-btn" title="Страницей ниже" onClick={() => scroll('down')}>
+              ⇟
+            </button>
+            <button
+              className="icon-btn"
+              title="В конец вывода — выход из copy-mode к живому выводу"
+              onClick={() => scroll('bottom')}
+            >
+              ↓
+            </button>
+            <button
+              className="icon-btn"
+              title={fullscreen ? 'Свернуть терминал' : 'Терминал на весь экран'}
+              onClick={() => setFullscreen((f) => !f)}
+            >
+              {fullscreen ? '⤡' : '⤢'}
+            </button>
+          </div>
+          <div className="terminal-search-box">
+            <input
+              ref={searchInputRef}
+              type="text"
+              className="terminal-search"
+              placeholder="Search output (Ctrl+F)…  Enter — next, Shift+Enter — prev"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') runSearch(e.shiftKey)
+                if (e.key === 'Escape') {
+                  setSearchQuery('')
+                  searchAddonRef.current?.clearDecorations()
+                  setSearchResults({ index: -1, count: 0 })
+                  xtermRef.current?.focus()
+                }
+              }}
+            />
+            {searchQuery && (
+              <span className="terminal-search-count">
+                {searchResults.count === 0
+                  ? 'нет'
+                  : searchResults.index < 0
+                    ? `>${searchResults.count}`
+                    : `${searchResults.index + 1} / ${searchResults.count}`}
+              </span>
+            )}
+          </div>
         </div>
       </div>
       <div className="terminal-container" ref={containerRef}>
@@ -338,7 +385,7 @@ export default function Terminal({
           <button
             className="terminal-jump-bottom"
             title="К последнему выводу"
-            onClick={() => xtermRef.current?.scrollToBottom()}
+            onClick={() => scroll('bottom')}
           >
             ↓ вниз
           </button>
@@ -348,7 +395,7 @@ export default function Terminal({
       <div className="terminal-clip">
         <textarea
           className="terminal-clip-field"
-          placeholder="Выделенное в терминале появляется здесь — отсюда можно скопировать и вставить в браузере. В Claude выдели мышью и жми «Из буфера tmux»."
+          placeholder="Выделенное в терминале появляется здесь — отсюда можно скопировать и вставить в браузере. Если агент забрал мышь себе (TUI opencode, codex, gemini) — выделяй с Shift. В Claude выдели мышью и жми «Из буфера tmux»."
           value={clip}
           onChange={(e) => setClip(e.target.value)}
         />
@@ -357,15 +404,15 @@ export default function Terminal({
             <button
               className="btn btn-secondary btn-sm"
               onClick={pullTmuxBuffer}
-              title="Забрать текст, выделенный мышью в Claude (он попадает в буфер tmux, а не в выделение xterm)"
+              title="Забрать текст, выделенный мышью в Claude: у него выделение уходит в буфер tmux, а не в выделение xterm. Буфер общий на весь tmux-сервер, так что это последнее выделение в любой сессии — у остальных агентов надёжнее Shift+мышь."
             >
               Из буфера tmux
             </button>
           )}
           <button
             className="btn btn-secondary btn-sm"
-            onClick={dumpBuffer}
-            title="Переложить сюда весь вывод терминала, включая прокрученный"
+            onClick={pullCapture}
+            title="Переложить сюда весь вывод панели, включая прокрученный (снимается из tmux)"
           >
             Весь вывод
           </button>

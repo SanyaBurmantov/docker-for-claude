@@ -32,6 +32,11 @@ RUN npm install -g opencode-ai
 # mounted as a volume in docker-compose.
 RUN npm install -g @openai/codex
 
+# Gemini CLI: a fourth coding agent next to Claude Code, opencode and Codex. It
+# authenticates with GEMINI_API_KEY (passed in from .env) and keeps its state in
+# /home/claude/.gemini, a volume like the rest.
+RUN npm install -g @google/gemini-cli
+
 # /workspace is a bind mount, and a bind mount carries the host's numeric uid/gid
 # straight through: a file written here as uid 0 is root-owned on the host too, and
 # the host user cannot edit it (WebStorm reports "failed to change read-only status").
@@ -51,7 +56,17 @@ RUN if id ubuntu >/dev/null 2>&1; then userdel -r ubuntu; fi && \
 # the first `docker compose up` initialises the empty `opencode-config` volume with it.
 RUN mkdir -p /home/claude/.config/opencode
 COPY opencode.json /home/claude/.config/opencode/opencode.json
+# The same file where the entrypoint can still see it: the line above only seeds an
+# empty volume, so an existing install would never learn about a provider or theme
+# added later (see scripts/entrypoint.sh).
+COPY opencode.json /etc/skel-opencode.json
 RUN chown -R ${HOST_UID}:${HOST_GID} /home/claude/.config
+
+# And for Gemini: without a settings file its first run stops on the auth/theme
+# picker. Unlike the two above, the file
+# is seeded by the entrypoint (see scripts/entrypoint.sh) — .gemini is a volume,
+# so a copy made at build time would be hidden by the mount on every start.
+COPY gemini-settings.json /etc/skel-gemini-settings.json
 
 # Same trick for Codex: seeds the empty `codex-home` volume on first start.
 RUN mkdir -p /home/claude/.codex

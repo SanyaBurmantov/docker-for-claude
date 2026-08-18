@@ -8,9 +8,12 @@
 export interface AgentSpec {
   bin: string;
   label: string;
-  continueFlag: string;
-  /** Whether the CLI takes an initial task as a positional argument. */
+  /** Reopens the previous conversation; `null` when the CLI has no such flag. */
+  continueFlag: string | null;
+  /** Whether the CLI takes an initial task on the command line. */
   supportsPrompt: boolean;
+  /** Flag the initial task rides on; `null` when it is a positional argument. */
+  promptFlag: string | null;
   /** `<bin> --version` prints this agent's version; used to detect it in the container. */
   versionCmd: string;
   /**
@@ -30,6 +33,7 @@ export const AGENTS = {
     label: 'Claude Code',
     continueFlag: '--continue',
     supportsPrompt: true,
+    promptFlag: null,
     versionCmd: 'claude --version',
     sessionIdFlag: '--session-id',
     resumeFlag: '--resume',
@@ -40,6 +44,7 @@ export const AGENTS = {
     continueFlag: '--continue',
     // opencode takes the first task through its TUI, not through argv.
     supportsPrompt: false,
+    promptFlag: null,
     versionCmd: 'opencode --version',
     sessionIdFlag: null,
     resumeFlag: null,
@@ -51,15 +56,30 @@ export const AGENTS = {
     // conversation in this directory. It is appended to `bin` exactly like a flag.
     continueFlag: 'resume --last',
     supportsPrompt: true,
+    promptFlag: null,
     versionCmd: 'codex --version',
     // Codex names its own sessions (uuid under $CODEX_HOME/sessions) and has no
     // flag to pin one up front, so the platform cannot record the id it started.
     sessionIdFlag: null,
     resumeFlag: null,
   },
+  gemini: {
+    bin: 'gemini',
+    label: 'Gemini',
+    // No documented resume flag, so a Gemini session always starts fresh.
+    continueFlag: null,
+    supportsPrompt: true,
+    // `-p` would answer and exit; `-i` opens the TUI with the task already sent.
+    promptFlag: '-i',
+    versionCmd: 'gemini --version',
+    sessionIdFlag: null,
+    resumeFlag: null,
+  },
 } as const satisfies Record<string, AgentSpec>;
 
 export type AgentId = keyof typeof AGENTS;
+
+export const AGENT_IDS = Object.keys(AGENTS) as AgentId[];
 
 export const DEFAULT_AGENT: AgentId = 'claude';
 

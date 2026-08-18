@@ -47,6 +47,9 @@ services:
       - DASHSCOPE_MODEL=${DASHSCOPE_MODEL:-qwen-max}
       # Codex picks this up when no `codex login` has been done in the volume.
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      # Gemini CLI: same key the backend uses for voice and the Gemini panel.
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - GEMINI_MODEL=${GEMINI_MODEL:-gemini-3.1-flash-lite}
     volumes:
       - ${PROJECTS_DIR}:/workspace
       - claude-auth:/home/claude/.claude
@@ -56,6 +59,8 @@ services:
       - opencode-config:/home/claude/.config/opencode
       # Codex keeps auth.json, config.toml and sessions/ in one directory.
       - codex-home:/home/claude/.codex
+      # Gemini CLI keeps settings.json and its chat history here.
+      - gemini-home:/home/claude/.gemini
       # Screenshots the user uploads in the web UI. Read-only: the agent opens them,
       # the backend is the only writer.
       - screenshots:/screenshots:ro
@@ -156,6 +161,8 @@ volumes:
   opencode-config:
     driver: local
   codex-home:
+    driver: local
+  gemini-home:
     driver: local
   platform-data:
     driver: local

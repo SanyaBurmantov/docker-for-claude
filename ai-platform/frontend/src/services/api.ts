@@ -29,9 +29,9 @@ export interface ClaudeEvent {
   project: string
 }
 
-export type AgentId = 'claude' | 'opencode' | 'codex'
+export type AgentId = 'claude' | 'opencode' | 'codex' | 'gemini'
 
-const AGENT_IDS: readonly AgentId[] = ['claude', 'opencode', 'codex']
+const AGENT_IDS: readonly AgentId[] = ['claude', 'opencode', 'codex', 'gemini']
 
 export function isAgentId(value: unknown): value is AgentId {
   return typeof value === 'string' && (AGENT_IDS as readonly string[]).includes(value)
@@ -43,6 +43,8 @@ export interface AgentInfo {
   version: string
   /** Whether the agent can be handed a task on the command line. */
   supportsPrompt: boolean
+  /** Whether the agent can reopen its previous conversation. */
+  supportsContinue: boolean
 }
 
 export interface StartSessionOptions {
@@ -177,12 +179,30 @@ export function startSession(id: string, opts: StartSessionOptions = {}): Promis
   })
 }
 
-export function stopSession(id: string): Promise<void> {
-  return request<void>(`/api/projects/${id}/session/stop`, { method: 'POST' })
+export function stopSession(id: string, agent: AgentId): Promise<void> {
+  return request<void>(`/api/projects/${id}/session/stop`, {
+    method: 'POST',
+    body: JSON.stringify({ agent }),
+  })
 }
 
-export function getSessionStatus(id: string): Promise<{ running: boolean; sessionId?: string; agent: AgentId }> {
-  return request<{ running: boolean; sessionId?: string; agent: AgentId }>(`/api/projects/${id}/session/status`)
+export interface AgentSession {
+  agent: AgentId
+  /** Terminal id of this agent's tab — what the WebSocket attaches to. */
+  sessionId: string
+  running: boolean
+}
+
+export interface SessionStatus {
+  sessions: AgentSession[]
+  /** Whether any agent is running in this project. */
+  running: boolean
+  /** Agent the project was last opened with — the tab the page starts on. */
+  lastAgent: AgentId
+}
+
+export function getSessionStatus(id: string): Promise<SessionStatus> {
+  return request<SessionStatus>(`/api/projects/${id}/session/status`)
 }
 
 export function getTmuxBuffer(id: string): Promise<{ text: string }> {
@@ -473,11 +493,27 @@ export async function transcribeAudio(blob: Blob): Promise<string> {
 }
 
 /** Types text into the running agent's pane, without submitting it. */
-export function pasteIntoSession(id: string, text: string): Promise<void> {
+export function pasteIntoSession(id: string, text: string, agent: AgentId): Promise<void> {
   return request(`/api/projects/${id}/session/paste`, {
     method: 'POST',
-    body: JSON.stringify({ text }),
+    body: JSON.stringify({ text, agent }),
   })
+}
+
+/**
+ * Прокрутка терминала. Всё крутится на стороне tmux: он рисует на альтернативном
+ * экране, где у xterm нет скроллбэка — его собственной прокрутке двигать нечего.
+ */
+export function scrollPane(sessionId: string, direction: 'up' | 'down' | 'top' | 'bottom'): Promise<void> {
+  return request<void>(`/api/pane/${encodeURIComponent(sessionId)}/scroll`, {
+    method: 'POST',
+    body: JSON.stringify({ direction }),
+  })
+}
+
+/** Скроллбэк терминала текстом — по той же причине его знает tmux, а не xterm. */
+export function capturePane(sessionId: string): Promise<string> {
+  return request<{ text: string }>(`/api/pane/${encodeURIComponent(sessionId)}/capture`).then((r) => r.text)
 }
 
 export interface Screenshot {
@@ -510,10 +546,10 @@ export function deleteScreenshot(id: string, name: string): Promise<void> {
 }
 
 /** Types the paths into the running agent's prompt, without submitting. */
-export function attachScreenshots(id: string, names: string[]): Promise<{ paths: string[] }> {
+export function attachScreenshots(id: string, names: string[], agent: AgentId): Promise<{ paths: string[] }> {
   return request(`/api/projects/${id}/screenshots/attach`, {
     method: 'POST',
-    body: JSON.stringify({ names }),
+    body: JSON.stringify({ names, agent }),
   })
 }
 

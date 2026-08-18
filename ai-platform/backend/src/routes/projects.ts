@@ -6,6 +6,7 @@ import { spawn } from 'child_process';
 import multer from 'multer';
 import { scanProjects, getProjectInfo, listFilesRecursive, readProjectFile, writeProjectFile, isValidProjectName, isPathSafe } from '../services/projectService';
 import { execInContainer, tmuxSessionName } from '../services/dockerService';
+import { AGENT_IDS } from '../services/agents';
 import { getAll, metaFor, remove as removeMeta, update as updateMeta } from '../services/metadataService';
 import { removeAll as removeScreenshots } from '../services/screenshotService';
 
@@ -51,7 +52,9 @@ router.get('/', async (_req, res) => {
     res.json(
       projects.map((p) => {
         const { favorite, lastOpened } = metaFor(meta, p.name);
-        return { ...p, running: sessions.includes(tmuxSessionName(p.name)), favorite, lastOpened };
+        // Any agent counts: the project page runs them as separate sessions now.
+        const running = AGENT_IDS.some((agent) => sessions.includes(tmuxSessionName(p.name, agent)));
+        return { ...p, running, favorite, lastOpened };
       })
     );
   } catch (err) {
