@@ -7,6 +7,7 @@ declare global {
       platform: string
       showOverlay(): Promise<void>
       hideOverlay(): Promise<void>
+      captureScreen(): Promise<ArrayBuffer | null>
     }
   }
 }

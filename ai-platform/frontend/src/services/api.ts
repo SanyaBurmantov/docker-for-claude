@@ -511,11 +511,13 @@ export function fetchVoiceStatus(): Promise<VoiceStatus> {
 export async function assistVoice(
   blob: Blob,
   context: string,
+  imageBlob?: Blob,
   signal?: AbortSignal
 ): Promise<VoiceAssistResult> {
   const fd = new FormData()
   fd.append('audio', blob, `conversation.${blob.type.includes('ogg') ? 'ogg' : 'webm'}`)
   if (context) fd.append('context', context)
+  if (imageBlob) fd.append('image', imageBlob, 'screen.png')
 
   const res = await fetch('/api/voice/assist', { method: 'POST', body: fd, signal })
   if (!res.ok) {

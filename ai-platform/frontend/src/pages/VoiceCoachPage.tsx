@@ -130,7 +130,13 @@ export default function VoiceCoachPage() {
       const controller = new AbortController()
       requestRef.current = controller
       try {
-        const result = await assistVoice(audio, contextRef.current.join('\n'), controller.signal)
+        let imageBlob: Blob | undefined;
+        if (window.aiDesktop) {
+          const buffer = await window.aiDesktop.captureScreen();
+          if (buffer) imageBlob = new Blob([buffer], { type: 'image/png' });
+        }
+
+        const result = await assistVoice(audio, contextRef.current.join('\n'), imageBlob, controller.signal)
         if (!activeRef.current) break
 
         if (result.transcript) {

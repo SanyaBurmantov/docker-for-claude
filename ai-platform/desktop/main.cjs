@@ -167,6 +167,11 @@ app.whenReady().then(() => {
   ipcMain.handle('voice-helper:hide-overlay', () => {
     overlayWindow?.hide()
   })
+  ipcMain.handle('voice-helper:capture-screen', async () => {
+    if (!mainWindow) return null
+    const image = await mainWindow.webContents.capturePage()
+    return image.toPNG()
+  })
 
   createMainWindow()
   app.on('activate', () => {
@@ -176,5 +181,9 @@ app.whenReady().then(() => {
 })
 
 app.on('window-all-closed', () => {
+  // If overlay is open, keep the app running.
+  if (overlayWindow && !overlayWindow.isDestroyed() && overlayWindow.isVisible()) {
+    return
+  }
   if (process.platform !== 'darwin') app.quit()
 })
