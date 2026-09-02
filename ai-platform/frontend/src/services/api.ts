@@ -492,6 +492,45 @@ export async function transcribeAudio(blob: Blob): Promise<string> {
   return text.trim()
 }
 
+export interface VoiceStatus {
+  configured: boolean
+  model: string
+}
+
+export interface VoiceAssistResult {
+  transcript: string
+  question: string
+  answer: string
+}
+
+export function fetchVoiceStatus(): Promise<VoiceStatus> {
+  return request<VoiceStatus>('/api/voice/status')
+}
+
+/** Transcribes one speech segment and returns a ready-to-say answer when it was a question. */
+export async function assistVoice(
+  blob: Blob,
+  context: string,
+  signal?: AbortSignal
+): Promise<VoiceAssistResult> {
+  const fd = new FormData()
+  fd.append('audio', blob, `conversation.${blob.type.includes('ogg') ? 'ogg' : 'webm'}`)
+  if (context) fd.append('context', context)
+
+  const res = await fetch('/api/voice/assist', { method: 'POST', body: fd, signal })
+  if (!res.ok) {
+    const raw = await res.text().catch(() => res.statusText)
+    let message = raw
+    try {
+      message = JSON.parse(raw).error ?? raw
+    } catch {
+      // Keep a non-JSON upstream error readable.
+    }
+    throw new Error(message || `HTTP ${res.status}`)
+  }
+  return res.json()
+}
+
 /** Types text into the running agent's pane, without submitting it. */
 export function pasteIntoSession(id: string, text: string, agent: AgentId): Promise<void> {
   return request(`/api/projects/${id}/session/paste`, {

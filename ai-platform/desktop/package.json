@@ -1,0 +1,38 @@
+{
+  "name": "ai-platform-desktop",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Windows/Linux desktop companion for the Docker AI Platform",
+  "main": "main.cjs",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win nsis --linux AppImage",
+    "dist:win": "electron-builder --win nsis",
+    "dist:linux": "electron-builder --linux AppImage"
+  },
+  "devDependencies": {
+    "electron": "^44.1.1",
+    "electron-builder": "^26.15.3"
+  },
+  "build": {
+    "appId": "local.ai-platform.desktop",
+    "productName": "AI Platform",
+    "asar": true,
+    "files": [
+      "main.cjs",
+      "preload.cjs",
+      "loading.html",
+      "package.json"
+    ],
+    "directories": {
+      "output": "dist"
+    },
+    "win": {
+      "target": "nsis"
+    },
+    "linux": {
+      "target": "AppImage",
+      "category": "Utility"
+    }
+  }
+}

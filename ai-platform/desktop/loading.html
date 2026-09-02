@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>AI Platform — запуск</title>
+    <style>
+      html, body { height: 100%; margin: 0; background: #05060f; color: #d5e5f5; }
+      body { display: grid; place-items: center; font: 16px "Segoe UI", sans-serif; }
+      main { width: min(520px, 84vw); padding: 32px; border: 1px solid rgba(0,240,255,.35); background: #090c18; }
+      h1 { margin: 0 0 14px; color: #00f0ff; font-size: 22px; letter-spacing: 2px; text-transform: uppercase; }
+      p { margin: 8px 0; color: #7d8fab; line-height: 1.55; }
+      code { color: #2bff88; }
+      .pulse { display: inline-block; width: 9px; height: 9px; margin-right: 8px; border-radius: 50%; background: #e8b04b; animation: pulse 1s infinite; }
+      @keyframes pulse { 50% { opacity: .25; } }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1><span class="pulse"></span>AI Platform</h1>
+      <p>Жду Docker-сервис на <code>http://localhost:9900</code>…</p>
+      <p>Окно откроется автоматически, как только frontend станет доступен.</p>
+    </main>
+  </body>
+</html>

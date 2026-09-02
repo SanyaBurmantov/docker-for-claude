@@ -34,7 +34,7 @@ docker compose -f docker-compose.dev.yml up -d
   - `gitService.ts`, `projectService.ts`, `claudeEvents.ts`.
   - `engines.ts` → `runEngine` — единый интерфейс к claude/opencode/codex/gemini; `project` опционален (без него cwd `/workspace`), у codex `readOnly` включает `-a never -s read-only`.
 - `routes/` — тонкие обёртки над сервисами. **`review.ts` и `explain.ts` — эталонные паттерны** одноразового LLM-запроса со стримом в SSE.
-  - `voice.ts` — `POST /api/voice/transcribe` (multipart `audio`): распознавание речи через Gemini (`GEMINI_MODEL`, аудио уходит inline). Аудио — данные, а не инструкции (оговорка в промпте).
+  - `voice.ts` — `POST /api/voice/transcribe` (обычная диктовка) и `/assist` (одним мультимодальным запросом расшифровывает сегмент разговора и предлагает короткий английский ответ). Аудио и контекст — данные, не инструкции.
   - `sessions.ts` — `/api/projects/:id/session/{start,stop,status,paste}`. **Сессия — это пара «проект + агент»:** tmux зовётся `<агент>-<проект>` (у claude имя историческое, поэтому старые сессии живы), так что агенты работают одновременно и останавливаются по отдельности. `status` отвечает сразу про всех — страница рисует по вкладке на каждого. `stop`/`paste` требуют агента; без него подразумевается claude, как было до вкладок.
   - `pane.ts` — `/api/pane/:sessionId/{scroll,capture}`. **Прокрутка терминала возможна только на стороне контейнера:** всё крутится внутри tmux, а он рисует на альтернативном экране, где у xterm скроллбэка нет вообще (его `scrollToTop`/дамп буфера видят только текущий экран). Обычная сессия листается copy-mode'ом tmux; если во вкладке полноэкранный TUI (`#{alternate_on}` = 1), истории нет и у tmux — туда просто уходят PageUp/PageDown, и листает уже само приложение.
   - `chat.ts` — свободный чат, смонтирован дважды: `/api/claude/chat` (без проекта и без инструментов) и `/api/projects/:id/chat` (cwd проекта, `READ_ONLY_TOOLS`). Claude помнит разговор своей сессией (`sessionId` + `resume`), codex сессию назвать нельзя — ему транскрипт пересылается целиком.
@@ -51,6 +51,11 @@ docker compose -f docker-compose.dev.yml up -d
 - `hooks/useDrawer.ts` — состояние выдвижной панели, общее на все: панели делят края экрана, поэтому открытие одной закрывает остальные. Слоты табов задаются `--tab-slot` (шаг = `--tab-height`), ширина — `--drawer-width` на `.drawer-left|right`.
 - `components/MicButton.tsx` — кнопка микрофона: MediaRecorder → `/api/voice/transcribe` → текст в колбэк. Стоит в обеих чат-панелях, в коммит-сообщении, в модалке «With task…» и в тулбаре терминала агента (там надиктованное уходит в его промпт через `session/paste`). **Микрофону нужен secure context** — по http работает только на localhost.
 - `components/ScreenshotPanel.tsx` — `Drawer` справа (Ctrl+Shift+S): Ctrl+V/drag&drop загружает скриншот, «→ сессия» вставляет его путь в промпт запущенного агента через `tmux paste-buffer`.
+- `pages/VoiceCoachPage.tsx` — вкладка VC: VAD режет выбранный аудиопоток по паузам, `/api/voice/assist` анализирует сегменты, состояние публикуется в `voiceHelperState` для отдельного overlay-окна.
+
+## Desktop (`desktop/`)
+
+Electron-оболочка не заменяет Docker: ждёт готовности `localhost:9900` и показывает существующий frontend. Через минимальный preload API VC открывает frameless always-on-top окно `/vc/overlay`; системный звук выдаётся renderer через `setDisplayMediaRequestHandler` и loopback текущего экрана. Внешние URL, включая noVNC на другом порту, открываются в системном браузере.
 - `services/clipboard.ts` → `copyText` — копирование с фолбэком на `execCommand`: на не-secure origin (http по LAN-IP) `navigator.clipboard` недоступен.
 - `pages/ProjectPage.tsx` — тулбар проекта, diff, файлы. **Вкладка на каждого агента** плюс Shell/Diff/Files/Git/Tasks/Fixes в одном ряду; старт, resume, «с задачей», «Новая задача» и стоп — в тулбаре той вкладки, к которой относятся. Терминалы агентов смонтированы всегда и прячутся через CSS: размонтирование выбросило бы скроллбэк xterm. Скриншоты и «обсудить» из чеклистов адресуются `lastAgent` — вкладке агента, на которой человек был последним.
 
