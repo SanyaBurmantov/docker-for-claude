@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import Modal from './Modal'
+import { useLanguage } from '../i18n'
 
 const REPO_URL = 'https://github.com/SanyaBurmantov/docker-for-claude'
 const TRC20 = 'TVnU9zWAEZdP2DfhQhKx3Zsiarn6uaHpzY'
@@ -7,6 +8,7 @@ const TRC20 = 'TVnU9zWAEZdP2DfhQhKx3Zsiarn6uaHpzY'
 /** Fixed bottom-right links: repo icon + a small Donate button opening a centered modal. */
 export default function SiteFooter() {
   const [showDonate, setShowDonate] = useState(false)
+  const { t } = useLanguage()
 
   return (
     <>
@@ -24,12 +26,12 @@ export default function SiteFooter() {
           </svg>
         </a>
         <button className="btn btn-secondary btn-sm" onClick={() => setShowDonate(true)}>
-          Donate
+          {t('footer.donate')}
         </button>
       </div>
 
       {showDonate && (
-        <Modal title="Поблагодарить автора" onClose={() => setShowDonate(false)}>
+        <Modal title={t('footer.donateTitle')} onClose={() => setShowDonate(false)}>
           <div className="donate-body">
             <img src="/trc20.jpg" alt="TRC20 QR" className="donate-qr" />
             <div className="donate-label">TRC20</div>

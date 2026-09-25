@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { getServerTime } from '../services/api'
+import { useLanguage } from '../i18n'
 
 /** How often the server is asked again. Enough to correct any drift between polls. */
 const SYNC_MS = 150_000
@@ -21,6 +22,7 @@ interface Sync {
  * Its own component so the tick re-renders the clock alone and not the page under it.
  */
 export default function Clock() {
+  const { language, locale } = useLanguage()
   const [sync, setSync] = useState<Sync | null>(null)
   const [, tick] = useState(0)
 
@@ -61,9 +63,9 @@ export default function Clock() {
     <time
       className="navbar-clock"
       dateTime={now.toISOString()}
-      title={`${now.toLocaleDateString('ru-RU', { dateStyle: 'full', ...opts })} · ${sync.timeZone}`}
+      title={`${now.toLocaleDateString(locale, { dateStyle: 'full', ...opts })} · ${sync.timeZone}`}
     >
-      {now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true, ...opts })}
+      {now.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit', hour12: language === 'en', ...opts })}
     </time>
   )
 }

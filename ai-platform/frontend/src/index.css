@@ -232,6 +232,25 @@ button.nav-link {
   font-family: inherit;
 }
 
+.language-select {
+  padding: 6px 8px;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 1px;
+  color: var(--cyan);
+  background: var(--bg-2);
+  border: 1px solid var(--line-strong);
+  clip-path: var(--cut-sm);
+  cursor: pointer;
+}
+
+.language-select:focus {
+  outline: none;
+  border-color: var(--cyan);
+  box-shadow: var(--glow-cyan);
+}
+
 /* Tabular figures keep the seconds from nudging the layout every tick. */
 .navbar-clock {
   margin-left: 8px;
@@ -2031,11 +2050,10 @@ button.nav-link {
   }
 }
 
-/* ============ DRAWERS — Gemini / Claude / project chat (left), shots (right) ============ */
+/* ============ DRAWERS — text / project chat (left), shots (right) ============ */
 
 /* One drawer per panel: same shell, own accent and own slot on its edge. */
-.drawer-gemini { --drawer-accent: var(--magenta); --drawer-glow: var(--glow-magenta); --tab-slot: calc(-1 * var(--tab-height)); }
-.drawer-claude { --drawer-accent: var(--cyan); --drawer-glow: var(--glow-cyan); --tab-slot: 0px; }
+.drawer-chat { --drawer-accent: var(--cyan); --drawer-glow: var(--glow-cyan); --tab-slot: 0px; }
 .drawer-project { --drawer-accent: var(--brass); --drawer-glow: var(--glow-brass); --tab-slot: var(--tab-height); }
 .drawer-shots { --drawer-accent: var(--cyan); --drawer-glow: var(--glow-cyan); }
 
@@ -2137,42 +2155,25 @@ body:has(.drawer-open) .drawer-tab:not(.drawer-tab-open) {
   gap: 6px;
 }
 
-.chat-engines {
-  display: flex;
-}
-
-.chat-engine {
-  padding: 3px 7px;
-  font-family: var(--font-mono);
-  font-size: 0.66rem;
-  color: var(--text-faint);
-  background: var(--bg-3);
-  border: 1px solid var(--line);
-  cursor: pointer;
-}
-
-.chat-engine + .chat-engine {
-  border-left: none;
-}
-
-.chat-engine-on {
-  color: var(--drawer-accent);
-  border-color: var(--drawer-accent);
-}
-
-.chat-engine:disabled {
-  cursor: default;
-}
-
+.chat-provider,
 .chat-model {
   padding: 4px 6px;
-  max-width: 150px;
   font-family: var(--font-mono);
   font-size: 0.68rem;
   color: var(--text-dim);
   background: var(--bg-3);
   border: 1px solid var(--line);
   cursor: pointer;
+}
+
+.chat-provider {
+  max-width: 82px;
+  color: var(--drawer-accent);
+  border-color: var(--drawer-accent);
+}
+
+.chat-model {
+  max-width: 150px;
 }
 
 .drawer-icon-btn {

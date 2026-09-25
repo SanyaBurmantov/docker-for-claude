@@ -6,6 +6,7 @@ import { SearchAddon } from 'xterm-addon-search'
 import { useWebSocket } from '../hooks/useWebSocket'
 import { capturePane, getTmuxBuffer, scrollPane } from '../services/api'
 import { copyText } from '../services/clipboard'
+import { useLanguage } from '../i18n'
 import 'xterm/css/xterm.css'
 
 /** Подсветка всех совпадений + отметки на overview ruler; цвета — из темы терминала ниже. */
@@ -47,6 +48,7 @@ export default function Terminal({
   label = 'Claude AI',
   searchExtra,
 }: TerminalProps) {
+  const { t } = useLanguage()
   const containerRef = useRef<HTMLDivElement>(null)
   const xtermRef = useRef<XTerm | null>(null)
   const fitAddonRef = useRef<FitAddon | null>(null)
@@ -170,9 +172,9 @@ export default function Terminal({
     })
 
     setTimeout(() => fitAddon.fit(), 50)
-    term.write(`${label} terminal\r\n`)
+    term.write(`${t('terminal.title', { label })}\r\n`)
     if (!sessionId) {
-      term.write('\x1b[33mСессия не запущена — кнопка Start в тулбаре.\x1b[0m\r\n')
+      term.write(`\x1b[33m${t('terminal.notStartedMessage')}\x1b[0m\r\n`)
     }
 
     xtermRef.current = term
@@ -191,15 +193,15 @@ export default function Terminal({
     if (!xtermRef.current) return
     xtermRef.current.clear()
     if (!sessionId) {
-      xtermRef.current.write('\x1b[33mСессия не запущена — кнопка Start в тулбаре.\x1b[0m\r\n')
+      xtermRef.current.write(`\x1b[33m${t('terminal.notStartedMessage')}\x1b[0m\r\n`)
     } else if (isConnected) {
-      xtermRef.current.write(`\x1b[32mПодключено: ${label}.\x1b[0m\r\n`)
+      xtermRef.current.write(`\x1b[32m${t('terminal.connected', { label })}\x1b[0m\r\n`)
       // Sync the server-side pty with the actual terminal size
       fitAddonRef.current?.fit()
       const term = xtermRef.current
       sendResizeRef.current(term.cols, term.rows)
     }
-  }, [sessionId, isConnected])
+  }, [sessionId, isConnected, label, t])
 
   useEffect(() => {
     fitAddonRef.current?.fit()
@@ -233,7 +235,7 @@ export default function Terminal({
       const { text } = await getTmuxBuffer(projectId)
       setClip(text)
     } catch (err) {
-      setClip(`Не удалось прочитать буфер tmux: ${err}`)
+      setClip(t('terminal.bufferFailed', { error: String(err) }))
     }
   }
 
@@ -303,14 +305,14 @@ export default function Terminal({
           <div className="terminal-font-controls">
             <button
               className="icon-btn"
-              title="Smaller font"
+              title={t('terminal.smallerFont')}
               onClick={() => setFontSize((s) => Math.max(8, s - 1))}
             >
               A−
             </button>
             <button
               className="icon-btn"
-              title="Larger font"
+              title={t('terminal.largerFont')}
               onClick={() => setFontSize((s) => Math.min(24, s + 1))}
             >
               A＋
@@ -319,27 +321,27 @@ export default function Terminal({
           <div className="terminal-scroll-controls">
             <button
               className="icon-btn"
-              title="В начало вывода (copy-mode tmux)"
+              title={t('terminal.scrollTop')}
               onClick={() => scroll('top')}
             >
               ↑
             </button>
-            <button className="icon-btn" title="Страницей выше" onClick={() => scroll('up')}>
+            <button className="icon-btn" title={t('terminal.pageUp')} onClick={() => scroll('up')}>
               ⇞
             </button>
-            <button className="icon-btn" title="Страницей ниже" onClick={() => scroll('down')}>
+            <button className="icon-btn" title={t('terminal.pageDown')} onClick={() => scroll('down')}>
               ⇟
             </button>
             <button
               className="icon-btn"
-              title="В конец вывода — выход из copy-mode к живому выводу"
+              title={t('terminal.scrollBottom')}
               onClick={() => scroll('bottom')}
             >
               ↓
             </button>
             <button
               className="icon-btn"
-              title={fullscreen ? 'Свернуть терминал' : 'Терминал на весь экран'}
+              title={fullscreen ? t('terminal.collapse') : t('terminal.fullscreen')}
               onClick={() => setFullscreen((f) => !f)}
             >
               {fullscreen ? '⤡' : '⤢'}
@@ -350,7 +352,7 @@ export default function Terminal({
               ref={searchInputRef}
               type="text"
               className="terminal-search"
-              placeholder="Search output (Ctrl+F)…  Enter — next, Shift+Enter — prev"
+              placeholder={t('terminal.search')}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               onKeyDown={(e) => {
@@ -366,7 +368,7 @@ export default function Terminal({
             {searchQuery && (
               <span className="terminal-search-count">
                 {searchResults.count === 0
-                  ? 'нет'
+                  ? t('terminal.none')
                   : searchResults.index < 0
                     ? `>${searchResults.count}`
                     : `${searchResults.index + 1} / ${searchResults.count}`}
@@ -378,16 +380,16 @@ export default function Terminal({
       <div className="terminal-container" ref={containerRef}>
         {!sessionId && (
           <div className="terminal-placeholder">
-            Session not started
+            {t('terminal.notStarted')}
           </div>
         )}
         {!atBottom && (
           <button
             className="terminal-jump-bottom"
-            title="К последнему выводу"
+            title={t('terminal.jumpBottomTitle')}
             onClick={() => scroll('bottom')}
           >
-            ↓ вниз
+            {t('terminal.jumpBottom')}
           </button>
         )}
       </div>
@@ -395,7 +397,7 @@ export default function Terminal({
       <div className="terminal-clip">
         <textarea
           className="terminal-clip-field"
-          placeholder="Выделенное в терминале появляется здесь — отсюда можно скопировать и вставить в браузере. Если агент забрал мышь себе (TUI opencode, codex, gemini) — выделяй с Shift. В Claude выдели мышью и жми «Из буфера tmux»."
+          placeholder={t('terminal.clipPlaceholder')}
           value={clip}
           onChange={(e) => setClip(e.target.value)}
         />
@@ -404,23 +406,23 @@ export default function Terminal({
             <button
               className="btn btn-secondary btn-sm"
               onClick={pullTmuxBuffer}
-              title="Забрать текст, выделенный мышью в Claude: у него выделение уходит в буфер tmux, а не в выделение xterm. Буфер общий на весь tmux-сервер, так что это последнее выделение в любой сессии — у остальных агентов надёжнее Shift+мышь."
+              title={t('terminal.tmuxBufferTitle')}
             >
-              Из буфера tmux
+              {t('terminal.tmuxBuffer')}
             </button>
           )}
           <button
             className="btn btn-secondary btn-sm"
             onClick={pullCapture}
-            title="Переложить сюда весь вывод панели, включая прокрученный (снимается из tmux)"
+            title={t('terminal.allOutputTitle')}
           >
-            Весь вывод
+            {t('terminal.allOutput')}
           </button>
           <button className="btn btn-secondary btn-sm" onClick={() => copyText(clip)} disabled={!clip}>
-            Копировать
+            {t('common.copy')}
           </button>
           <button className="btn btn-secondary btn-sm" onClick={() => setClip('')} disabled={!clip}>
-            Очистить
+            {t('common.clear')}
           </button>
         </div>
       </div>

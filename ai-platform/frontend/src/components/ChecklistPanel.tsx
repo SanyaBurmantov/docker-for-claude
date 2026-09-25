@@ -5,17 +5,13 @@ import {
   withTaskAdded, withTaskRemoved, withTaskToggled,
 } from '../services/checklist'
 import { useToast } from './Toast'
+import { useLanguage } from '../i18n'
 
 /** Every string the panel shows, so one component can back both checklists. */
 export interface ChecklistCopy {
   /** Markdown heading written when the file does not exist yet. */
   heading: string
-  addPlaceholder: string
-  loading: string
-  loadError: string
-  empty: string
-  allDone: string
-  discussTitle: string
+  kind: 'tasks' | 'fixes'
 }
 
 interface ChecklistPanelProps {
@@ -27,6 +23,7 @@ interface ChecklistPanelProps {
 
 export default function ChecklistPanel({ projectId, file, copy, onDiscuss }: ChecklistPanelProps) {
   const toast = useToast()
+  const { t } = useLanguage()
   const [lines, setLines] = useState<string[] | null>(null)
   const [error, setError] = useState('')
   const [draft, setDraft] = useState('')
@@ -41,9 +38,9 @@ export default function ChecklistPanel({ projectId, file, copy, onDiscuss }: Che
       setLines(content === null ? [] : content.replace(/\r\n/g, '\n').split('\n'))
       setError('')
     } catch (e) {
-      setError(e instanceof Error ? e.message : copy.loadError)
+      setError(e instanceof Error ? e.message : t(`${copy.kind}.loadError`))
     }
-  }, [projectId, file, copy.loadError])
+  }, [projectId, file, copy.kind, t])
 
   // A tab switch remounts the panel, so the file is re-read on every open.
   useEffect(() => {
@@ -59,7 +56,7 @@ export default function ChecklistPanel({ projectId, file, copy, onDiscuss }: Che
       await saveChecklistFile(projectId, file, serialize(next))
     } catch (e) {
       setLines(previous)
-      toast('error', `Не сохранилось: ${e instanceof Error ? e.message : 'Unknown error'}`)
+      toast('error', t('checklist.saveFailed', { error: e instanceof Error ? e.message : t('common.unknownError') }))
     } finally {
       setSaving(false)
     }
@@ -79,14 +76,14 @@ export default function ChecklistPanel({ projectId, file, copy, onDiscuss }: Che
         {error}
         <div style={{ marginTop: 12 }}>
           <button className="btn btn-secondary btn-sm" onClick={load}>
-            Повторить
+            {t('checklist.retry')}
           </button>
         </div>
       </div>
     )
   }
 
-  if (!lines) return <div className="no-changes">{copy.loading}</div>
+  if (!lines) return <div className="no-changes">{t(`${copy.kind}.loading`)}</div>
 
   const tasks = parseTasks(lines)
   const active = tasks.filter((t) => !t.done)
@@ -98,24 +95,24 @@ export default function ChecklistPanel({ projectId, file, copy, onDiscuss }: Che
         className="task-check"
         onClick={() => commit(withTaskToggled(lines, task))}
         disabled={saving}
-        title={task.done ? 'Вернуть в работу' : 'Выполнено'}
-        aria-label={task.done ? 'Вернуть в работу' : 'Выполнено'}
+        title={task.done ? t('checklist.returnToWork') : t('checklist.done')}
+        aria-label={task.done ? t('checklist.returnToWork') : t('checklist.done')}
       >
         {task.done ? '☑' : '☐'}
       </button>
 
       <span className="task-text">{task.text}</span>
 
-      <button className="btn btn-secondary btn-sm" onClick={() => onDiscuss(task.text)} title={copy.discussTitle}>
-        Обсудить
+      <button className="btn btn-secondary btn-sm" onClick={() => onDiscuss(task.text)} title={t(`${copy.kind}.discussTitle`)}>
+        {t('common.discuss')}
       </button>
       <button
         className="btn btn-danger btn-sm"
         onClick={() => commit(withTaskRemoved(lines, task))}
         disabled={saving}
-        title="Удалить"
+        title={t('checklist.delete')}
       >
-        Удалить
+        {t('checklist.delete')}
       </button>
     </div>
   )
@@ -125,32 +122,32 @@ export default function ChecklistPanel({ projectId, file, copy, onDiscuss }: Che
       <div className="git-controls">
         <input
           type="text"
-          placeholder={copy.addPlaceholder}
+          placeholder={t(`${copy.kind}.placeholder`)}
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && handleAdd()}
         />
         <button className="btn btn-primary btn-sm" onClick={handleAdd} disabled={!draft.trim() || saving}>
-          Добавить
+          {t('checklist.add')}
         </button>
         <button className="btn btn-secondary btn-sm" onClick={load} disabled={saving}>
-          Обновить
+          {t('checklist.refresh')}
         </button>
       </div>
 
       {tasks.length === 0 ? (
         <div className="no-changes">
-          {copy.empty} Лягут в <code>{file}</code> в корне проекта — Claude их тоже видит.
+          {t(`${copy.kind}.empty`)} {t('checklist.fileHint', { file })}
         </div>
       ) : (
         <>
           <div className="tasks-list">
-            {active.length > 0 ? active.map(row) : <div className="no-changes">{copy.allDone}</div>}
+            {active.length > 0 ? active.map(row) : <div className="no-changes">{t(`${copy.kind}.allDone`)}</div>}
           </div>
 
           {done.length > 0 && (
             <div>
-              <h3 className="section-title">Выполнено</h3>
+              <h3 className="section-title">{t('checklist.completed')}</h3>
               <div className="tasks-list">{done.map(row)}</div>
             </div>
           )}
@@ -162,20 +159,10 @@ export default function ChecklistPanel({ projectId, file, copy, onDiscuss }: Che
 
 export const TASKS_COPY: ChecklistCopy = {
   heading: 'Tasks',
-  addPlaceholder: 'Новая задача…',
-  loading: 'Загрузка задач…',
-  loadError: 'Не удалось загрузить задачи',
-  empty: 'Задач пока нет.',
-  allDone: 'Всё сделано',
-  discussTitle: 'Запустить Claude с этой задачей',
+  kind: 'tasks',
 }
 
 export const FIXES_COPY: ChecklistCopy = {
   heading: 'Fixes',
-  addPlaceholder: 'Новая доработка…',
-  loading: 'Загрузка доработок…',
-  loadError: 'Не удалось загрузить доработки',
-  empty: 'Доработок пока нет. Их сюда складывает код-ревью на вкладке Git.',
-  allDone: 'Всё исправлено',
-  discussTitle: 'Запустить Claude с этой доработкой',
+  kind: 'fixes',
 }

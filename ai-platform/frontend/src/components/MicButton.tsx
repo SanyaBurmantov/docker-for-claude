@@ -1,6 +1,7 @@
 import { Dispatch, SetStateAction, useEffect, useRef, useState } from 'react'
 import { transcribeAudio } from '../services/api'
 import { useToast } from './Toast'
+import { useLanguage } from '../i18n'
 
 /** The usual destination for dictation: appended to whatever is already in a field. */
 export function appendTo(setText: Dispatch<SetStateAction<string>>) {
@@ -26,13 +27,14 @@ export default function MicButton({ onText, disabled, title }: Props) {
   const [state, setState] = useState<State>('idle')
   const recorderRef = useRef<MediaRecorder | null>(null)
   const toast = useToast()
+  const { t } = useLanguage()
 
   // A recording left running would keep the tab's mic indicator on for good.
   useEffect(() => () => recorderRef.current?.stream.getTracks().forEach((t) => t.stop()), [])
 
   async function start() {
     if (!navigator.mediaDevices?.getUserMedia) {
-      toast('error', 'Микрофон доступен только на localhost или по https')
+      toast('error', t('mic.localOnly'))
       return
     }
 
@@ -40,7 +42,7 @@ export default function MicButton({ onText, disabled, title }: Props) {
     try {
       stream = await navigator.mediaDevices.getUserMedia({ audio: true })
     } catch (err) {
-      toast('error', `Микрофон недоступен: ${(err as Error).message}`)
+      toast('error', t('mic.unavailable', { error: (err as Error).message }))
       return
     }
 
@@ -61,7 +63,7 @@ export default function MicButton({ onText, disabled, title }: Props) {
       try {
         const text = await transcribeAudio(blob)
         if (text) onText(text)
-        else toast('error', 'Ничего не расслышал')
+        else toast('error', t('mic.noSpeech'))
       } catch (err) {
         toast('error', (err as Error).message)
       } finally {
@@ -84,8 +86,8 @@ export default function MicButton({ onText, disabled, title }: Props) {
       className={`mic-btn ${state === 'recording' ? 'mic-btn-live' : ''}`}
       onClick={click}
       disabled={disabled || state === 'working'}
-      title={state === 'recording' ? 'Остановить и распознать' : title || 'Надиктовать'}
-      aria-label="Голосовой ввод"
+      title={state === 'recording' ? t('mic.stop') : title || t('mic.dictate')}
+      aria-label={t('mic.aria')}
     >
       {state === 'working' ? '…' : state === 'recording' ? '■' : '🎤'}
     </button>

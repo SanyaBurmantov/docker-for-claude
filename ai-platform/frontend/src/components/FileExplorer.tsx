@@ -3,6 +3,7 @@ import Editor, { OnMount } from '@monaco-editor/react'
 import { fetchFiles, fetchFileContent, saveFileContent, fsAction, uploadFiles, FileItem } from '../services/api'
 import Modal, { ConfirmDialog } from './Modal'
 import { useToast } from './Toast'
+import { useLanguage } from '../i18n'
 
 interface FileExplorerProps {
   projectId: string
@@ -34,6 +35,7 @@ export default function FileExplorer({ projectId }: FileExplorerProps) {
   const [dragOver, setDragOver] = useState(false)
   const uploadInputRef = useRef<HTMLInputElement>(null)
   const toast = useToast()
+  const { t } = useLanguage()
 
   // Refs keep the save handler (bound once inside Monaco) pointed at fresh state
   const stateRef = useRef({ path: null as string | null, content: '', dirty: false, saving: false })
@@ -57,16 +59,16 @@ export default function FileExplorer({ projectId }: FileExplorerProps) {
   }, [loadFiles])
 
   const loadFile = useCallback(async (path: string) => {
-    if (stateRef.current.dirty && !window.confirm('Discard unsaved changes?')) return
+    if (stateRef.current.dirty && !window.confirm(t('files.discard'))) return
     setSelected({ path, type: 'file' })
     setDirty(false)
     try {
       const content = await fetchFileContent(projectId, path)
       setFileContent(content)
     } catch {
-      setFileContent('// Error loading file content')
+      setFileContent(t('files.loadError'))
     }
-  }, [projectId])
+  }, [projectId, t])
 
   const handleSave = useCallback(async () => {
     const { path, content, dirty: isDirty, saving: isSaving } = stateRef.current
@@ -75,13 +77,13 @@ export default function FileExplorer({ projectId }: FileExplorerProps) {
     try {
       await saveFileContent(projectId, path, content)
       setDirty(false)
-      toast('success', `Saved ${path}`)
+      toast('success', t('files.saved', { path }))
     } catch (e) {
-      toast('error', `Save failed: ${e instanceof Error ? e.message : 'Unknown error'}`)
+      toast('error', t('files.saveFailed', { error: e instanceof Error ? e.message : t('common.unknownError') }))
     } finally {
       setSaving(false)
     }
-  }, [projectId, toast])
+  }, [projectId, t, toast])
 
   const handleEditorMount: OnMount = useCallback((editor, monaco) => {
     editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => {
@@ -109,20 +111,20 @@ export default function FileExplorer({ projectId }: FileExplorerProps) {
     const name = nameValue.trim()
     if (!name || !nameAction) return
     if (name.includes('/') || name.includes('..')) {
-      toast('error', 'Invalid name')
+      toast('error', t('files.invalidName'))
       return
     }
     try {
       if (nameAction === 'rename' && selected) {
         const newPath = parentDir(selected.path) ? `${parentDir(selected.path)}/${name}` : name
         await fsAction(projectId, 'rename', selected.path, newPath)
-        toast('success', `Renamed to ${newPath}`)
+        toast('success', t('files.renamed', { path: newPath }))
         setSelected({ ...selected, path: newPath })
       } else {
         const base = targetDir()
         const relPath = base ? `${base}/${name}` : name
         await fsAction(projectId, nameAction, relPath)
-        toast('success', nameAction === 'mkdir' ? `Folder ${relPath} created` : `File ${relPath} created`)
+        toast('success', t(nameAction === 'mkdir' ? 'files.folderCreated' : 'files.fileCreated', { path: relPath }))
         if (nameAction === 'create-file') {
           await loadFile(relPath)
         }
@@ -131,7 +133,7 @@ export default function FileExplorer({ projectId }: FileExplorerProps) {
       setNameAction(null)
       loadFiles()
     } catch (e) {
-      toast('error', `Failed: ${e instanceof Error ? e.message : 'Unknown error'}`)
+      toast('error', t('files.actionFailed', { error: e instanceof Error ? e.message : t('common.unknownError') }))
     }
   }
 
@@ -140,13 +142,13 @@ export default function FileExplorer({ projectId }: FileExplorerProps) {
     setConfirmDelete(false)
     try {
       await fsAction(projectId, 'delete', selected.path)
-      toast('success', `Deleted ${selected.path}`)
+      toast('success', t('files.deleted', { path: selected.path }))
       setSelected(null)
       setFileContent('')
       setDirty(false)
       loadFiles()
     } catch (e) {
-      toast('error', `Delete failed: ${e instanceof Error ? e.message : 'Unknown error'}`)
+      toast('error', t('files.deleteFailed', { error: e instanceof Error ? e.message : t('common.unknownError') }))
     }
   }
 
@@ -155,10 +157,13 @@ export default function FileExplorer({ projectId }: FileExplorerProps) {
     const dir = targetDir()
     try {
       await uploadFiles(projectId, dir, Array.from(fileList))
-      toast('success', `Uploaded ${fileList.length} file(s)${dir ? ` to ${dir}` : ''}`)
+      toast('success', t('files.uploaded', {
+        count: fileList.length,
+        destination: dir ? t('files.toDestination', { path: dir }) : '',
+      }))
       loadFiles()
     } catch (e) {
-      toast('error', `Upload failed: ${e instanceof Error ? e.message : 'Unknown error'}`)
+      toast('error', t('files.uploadFailed', { error: e instanceof Error ? e.message : t('common.unknownError') }))
     }
   }
 
@@ -234,10 +239,10 @@ export default function FileExplorer({ projectId }: FileExplorerProps) {
   }
 
   const selectedFile = selected?.type === 'file' ? selected.path : null
-  const language = selectedFile ? (languageMap[getFileExtension(selectedFile)] ?? 'plaintext') : 'plaintext'
+  const editorLanguage = selectedFile ? (languageMap[getFileExtension(selectedFile)] ?? 'plaintext') : 'plaintext'
 
   if (loading && files.length === 0) {
-    return <div className="loading">Loading files...</div>
+    return <div className="loading">{t('files.loading')}</div>
   }
 
   return (
@@ -253,12 +258,12 @@ export default function FileExplorer({ projectId }: FileExplorerProps) {
         }}
       >
         <div className="file-tree-toolbar">
-          <button className="icon-btn" title="New file" onClick={() => openNameModal('create-file')}>📄＋</button>
-          <button className="icon-btn" title="New folder" onClick={() => openNameModal('mkdir')}>📁＋</button>
-          <button className="icon-btn" title="Rename selected" onClick={() => openNameModal('rename')} disabled={!selected}>✏️</button>
-          <button className="icon-btn" title="Delete selected" onClick={() => setConfirmDelete(true)} disabled={!selected}>🗑</button>
-          <button className="icon-btn" title="Upload files (or drag & drop)" onClick={() => uploadInputRef.current?.click()}>⬆</button>
-          <button className="icon-btn" title="Refresh" onClick={loadFiles}>⟳</button>
+          <button className="icon-btn" title={t('files.newFile')} onClick={() => openNameModal('create-file')}>📄＋</button>
+          <button className="icon-btn" title={t('files.newFolder')} onClick={() => openNameModal('mkdir')}>📁＋</button>
+          <button className="icon-btn" title={t('files.renameSelected')} onClick={() => openNameModal('rename')} disabled={!selected}>✏️</button>
+          <button className="icon-btn" title={t('files.deleteSelected')} onClick={() => setConfirmDelete(true)} disabled={!selected}>🗑</button>
+          <button className="icon-btn" title={t('files.upload')} onClick={() => uploadInputRef.current?.click()}>⬆</button>
+          <button className="icon-btn" title={t('common.refresh')} onClick={loadFiles}>⟳</button>
           <input
             ref={uploadInputRef}
             type="file"
@@ -271,7 +276,7 @@ export default function FileExplorer({ projectId }: FileExplorerProps) {
           />
         </div>
         {files.length === 0 ? (
-          <div className="file-tree-item muted">No files — drop some here</div>
+          <div className="file-tree-item muted">{t('files.empty')}</div>
         ) : (
           renderTree(files)
         )}
@@ -282,20 +287,20 @@ export default function FileExplorer({ projectId }: FileExplorerProps) {
             <div className="file-editor-header">
               <span className="file-editor-path">
                 {selectedFile}
-                {dirty && <span className="file-dirty" title="Unsaved changes"> ●</span>}
+                {dirty && <span className="file-dirty" title={t('files.unsaved')}> ●</span>}
               </span>
               <button
                 className="btn btn-primary btn-sm"
                 onClick={handleSave}
                 disabled={!dirty || saving}
               >
-                {saving ? 'Saving…' : 'Save (Ctrl+S)'}
+                {saving ? t('files.saving') : t('files.saveShortcut')}
               </button>
             </div>
             <div className="file-editor-body">
               <Editor
                 value={fileContent}
-                language={language}
+                language={editorLanguage}
                 theme="vs-dark"
                 onMount={handleEditorMount}
                 onChange={(value) => {
@@ -315,23 +320,23 @@ export default function FileExplorer({ projectId }: FileExplorerProps) {
         ) : (
           <div className="editor-placeholder">
             <span style={{ fontSize: '2rem' }}>📄</span>
-            <span>Select a file to view its contents</span>
+            <span>{t('files.select')}</span>
           </div>
         )}
       </div>
 
       {nameAction && (
         <Modal
-          title={nameAction === 'rename' ? 'Rename' : nameAction === 'mkdir' ? 'New folder' : 'New file'}
+          title={nameAction === 'rename' ? t('files.rename') : nameAction === 'mkdir' ? t('files.newFolder') : t('files.newFile')}
           onClose={() => setNameAction(null)}
         >
           {nameAction !== 'rename' && (
             <p className="modal-hint">
-              In: /{targetDir() || ''}
+              {t('files.location', { path: targetDir() || '' })}
             </p>
           )}
           <div className="form-field">
-            <label>Name</label>
+            <label>{t('files.name')}</label>
             <input
               type="text"
               value={nameValue}
@@ -341,17 +346,20 @@ export default function FileExplorer({ projectId }: FileExplorerProps) {
             />
           </div>
           <div className="modal-actions">
-            <button className="btn btn-secondary btn-sm" onClick={() => setNameAction(null)}>Cancel</button>
-            <button className="btn btn-primary btn-sm" onClick={handleNameSubmit}>OK</button>
+            <button className="btn btn-secondary btn-sm" onClick={() => setNameAction(null)}>{t('common.cancel')}</button>
+            <button className="btn btn-primary btn-sm" onClick={handleNameSubmit}>{t('common.ok')}</button>
           </div>
         </Modal>
       )}
 
       {confirmDelete && selected && (
         <ConfirmDialog
-          title="Delete"
-          message={`Delete "${selected.path}"${selected.type === 'directory' ? ' and everything inside' : ''}?`}
-          confirmLabel="Delete"
+          title={t('files.deleteTitle')}
+          message={t('files.deleteMessage', {
+            path: selected.path,
+            inside: selected.type === 'directory' ? t('files.andInside') : '',
+          })}
+          confirmLabel={t('common.delete')}
           onConfirm={handleDelete}
           onCancel={() => setConfirmDelete(false)}
         />

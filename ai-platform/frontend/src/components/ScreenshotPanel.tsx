@@ -12,6 +12,7 @@ import {
 import { copyText } from '../services/clipboard'
 import { useToast } from './Toast'
 import { useDrawer } from '../hooks/useDrawer'
+import { useLanguage } from '../i18n'
 
 interface ScreenshotPanelProps {
   projectId: string
@@ -38,6 +39,7 @@ export default function ScreenshotPanel({ projectId, sessionRunning, agent }: Sc
   const [preview, setPreview] = useState<Screenshot | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const toast = useToast()
+  const { t } = useLanguage()
 
   useEffect(() => {
     if (open) fetchScreenshots(projectId).then(setShots).catch(() => setShots([]))
@@ -51,14 +53,14 @@ export default function ScreenshotPanel({ projectId, sessionRunning, agent }: Sc
       try {
         const saved = await uploadScreenshots(projectId, images)
         setShots((prev) => [...saved, ...prev])
-        toast('success', `Загружено: ${saved.length}`)
+        toast('success', t('shots.uploaded', { count: saved.length }))
       } catch (err) {
         toast('error', String(err))
       } finally {
         setBusy(false)
       }
     },
-    [projectId, toast]
+    [projectId, t, toast]
   )
 
   // A screenshot normally arrives on the clipboard, never as a file on disk, so the
@@ -79,7 +81,7 @@ export default function ScreenshotPanel({ projectId, sessionRunning, agent }: Sc
   async function attach(shot: Screenshot) {
     try {
       await attachScreenshots(projectId, [shot.name], agent)
-      toast('success', 'Путь вставлен в сессию')
+      toast('success', t('shots.attached'))
     } catch (err) {
       toast('error', String(err))
     }
@@ -98,7 +100,7 @@ export default function ScreenshotPanel({ projectId, sessionRunning, agent }: Sc
     <>
       <Drawer
         drawer={drawer}
-        label="SHOTS"
+        label={t('shots.label')}
         hotkey="s"
         side="right"
         // The lightbox opens on top of the panel, so Escape closes it first.
@@ -112,7 +114,7 @@ export default function ScreenshotPanel({ projectId, sessionRunning, agent }: Sc
             className="drawer-icon-btn"
             onClick={() => fileInputRef.current?.click()}
             disabled={busy}
-            title="Выбрать файлы"
+            title={t('shots.choose')}
           >
             +
           </button>
@@ -145,9 +147,9 @@ export default function ScreenshotPanel({ projectId, sessionRunning, agent }: Sc
         >
           {shots.length === 0 && (
             <p className="shots-empty">
-              Ctrl+V — вставить скриншот из буфера.
+              {t('shots.paste')}
               <br />
-              Или перетащи файлы сюда.
+              {t('shots.drop')}
             </p>
           )}
 
@@ -169,21 +171,21 @@ export default function ScreenshotPanel({ projectId, sessionRunning, agent }: Sc
                     className="btn btn-primary btn-sm"
                     onClick={() => attach(shot)}
                     disabled={!sessionRunning}
-                    title={sessionRunning ? 'Вставить путь в промпт агента' : 'Сессия не запущена'}
+                    title={sessionRunning ? t('shots.attach') : t('shots.sessionNotRunning')}
                   >
-                    → сессия
+                    {t('shots.toSession')}
                   </button>
                   <button
                     className="btn btn-secondary btn-sm"
                     onClick={() => {
                       copyText(shot.agentPath)
-                      toast('success', 'Путь скопирован')
+                      toast('success', t('shots.pathCopied'))
                     }}
                     title={shot.agentPath}
                   >
-                    путь
+                    {t('shots.path')}
                   </button>
-                  <button className="drawer-icon-btn" onClick={() => drop(shot)} title="Удалить">
+                  <button className="drawer-icon-btn" onClick={() => drop(shot)} title={t('common.delete')}>
                     ×
                   </button>
                 </div>

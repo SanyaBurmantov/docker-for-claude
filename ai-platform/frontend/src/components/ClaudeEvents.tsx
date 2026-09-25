@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useRef, useState, ReactNode } fro
 import { ClaudeEvent } from '../services/api'
 import { isSoundEnabled, playChime } from '../services/notify'
 import { useToast } from './Toast'
+import { useLanguage } from '../i18n'
 
 type AttentionMap = Record<string, 'waiting' | 'done' | undefined>
 
@@ -26,6 +27,7 @@ function titleFor(unseen: Unseen | null): string {
 
 export function ClaudeEventsProvider({ children }: { children: ReactNode }) {
   const toast = useToast()
+  const { t } = useLanguage()
   const [attention, setAttention] = useState<AttentionMap>({})
   const [unseen, setUnseen] = useState<Unseen | null>(null)
   const lastTsRef = useRef<number>(Number(localStorage.getItem('claude-events-ts')) || Date.now())
@@ -53,10 +55,7 @@ export function ClaudeEventsProvider({ children }: { children: ReactNode }) {
     let reconnectTimer: ReturnType<typeof setTimeout>
 
     function notify(e: ClaudeEvent) {
-      const msg =
-        e.type === 'notification'
-          ? `${e.project}: Claude ждёт ввода`
-          : `${e.project}: Claude закончил`
+      const msg = t(e.type === 'notification' ? 'events.waiting' : 'events.done', { project: e.project })
       toast('info', msg)
 
       // Only "waiting for input" rings: the Stop hook fires at the end of every
@@ -129,7 +128,7 @@ export function ClaudeEventsProvider({ children }: { children: ReactNode }) {
       socket?.close()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [t, toast])
 
   return <AttentionContext.Provider value={attention}>{children}</AttentionContext.Provider>
 }

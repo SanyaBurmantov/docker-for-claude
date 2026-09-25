@@ -4,17 +4,11 @@ import {
   subscribeVoiceSnapshot,
   VoiceHelperSnapshot,
 } from '../services/voiceHelperState'
-
-const LABEL: Record<VoiceHelperSnapshot['stage'], string> = {
-  off: 'HELP OFF',
-  listening: 'LISTENING',
-  hearing: 'HEARING',
-  thinking: 'THINKING',
-  error: 'ERROR',
-}
+import { useLanguage } from '../i18n'
 
 export default function VoiceHelperOverlay() {
   const [snapshot, setSnapshot] = useState(readVoiceSnapshot)
+  const { t } = useLanguage()
 
   useEffect(() => {
     document.body.classList.add('voice-overlay-body')
@@ -35,9 +29,9 @@ export default function VoiceHelperOverlay() {
       <header className="voice-overlay-header">
         <div className="voice-overlay-status">
           <span className="voice-state-dot" />
-          {LABEL[snapshot.stage]}
+          {t(`voice.overlay${snapshot.stage[0].toUpperCase()}${snapshot.stage.slice(1)}`)}
         </div>
-        <button onClick={close} aria-label="Закрыть окно">×</button>
+        <button onClick={close} aria-label={t('common.close')}>×</button>
       </header>
       <main className="voice-overlay-content">
         {snapshot.error ? (
@@ -49,7 +43,7 @@ export default function VoiceHelperOverlay() {
           </>
         ) : (
           <div className="voice-overlay-empty">
-            {snapshot.active ? 'Listening for a question…' : 'Open VC and press Help'}
+            {snapshot.active ? t('voice.overlayActiveEmpty') : t('voice.overlayInactiveEmpty')}
           </div>
         )}
       </main>

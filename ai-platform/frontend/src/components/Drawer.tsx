@@ -1,5 +1,6 @@
 import { ReactNode, useEffect } from 'react'
 import { DrawerState } from '../hooks/useDrawer'
+import { useLanguage } from '../i18n'
 
 interface DrawerProps {
   /** From `useDrawer` — the caller owns it because its content usually needs `open` too. */
@@ -29,6 +30,7 @@ export default function Drawer({
   onEscape,
   children,
 }: DrawerProps) {
+  const { t } = useLanguage()
   // The shortcut works from anywhere, including inside the terminal. Rebound every
   // render instead of tracking deps — the handler reads `open` and `onEscape`.
   useEffect(() => {
@@ -51,7 +53,7 @@ export default function Drawer({
         className={`drawer-tab ${mods} ${open ? 'drawer-tab-open' : ''}`}
         onClick={toggle}
         title={`${label} (Ctrl+Shift+${hotkey.toUpperCase()})`}
-        aria-label={`Toggle ${label} panel`}
+        aria-label={t('drawer.toggle', { label })}
       >
         <span className="drawer-tab-label">{label}</span>
       </button>
@@ -63,7 +65,7 @@ export default function Drawer({
           <h3>{label}</h3>
           <div className="drawer-header-actions">
             {headerActions}
-            <button className="drawer-icon-btn" onClick={close} aria-label="Close">
+            <button className="drawer-icon-btn" onClick={close} aria-label={t('common.close')}>
               ×
             </button>
           </div>

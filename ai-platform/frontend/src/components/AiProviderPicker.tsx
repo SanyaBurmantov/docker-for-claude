@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react'
 import type { AgentId, AgentInfo, AiProvider } from '../services/api'
+import { useLanguage } from '../i18n'
 
 interface Props {
   value: AiProvider
@@ -27,6 +28,7 @@ export const AI_PROVIDER_PRESENTATION: Record<AiProvider, ProviderPresentation> 
  * the platform theme consistently, especially in Chromium on Linux.
  */
 export default function AiProviderPicker({ value, agents, running, disabled, onChange }: Props) {
+  const { t } = useLanguage()
   const [open, setOpen] = useState(false)
   const rootRef = useRef<HTMLDivElement>(null)
   const triggerRef = useRef<HTMLButtonElement>(null)
@@ -99,13 +101,13 @@ export default function AiProviderPicker({ value, agents, running, disabled, onC
           event.preventDefault()
           setOpen(true)
         }}
-        title="AI для терминала, чата проекта и Git-инструментов"
+        title={t('aiPicker.title')}
       >
         <span className="ai-picker-glyph" aria-hidden="true">{current.glyph}</span>
         <span className="ai-picker-copy">
           <strong>{current.label}</strong>
         </span>
-        {running[value] && <span className="ai-picker-live" title="Сессия запущена" />}
+        {running[value] && <span className="ai-picker-live" title={t('aiPicker.running')} />}
         <span className="ai-picker-chevron" aria-hidden="true" />
       </button>
 
@@ -114,10 +116,10 @@ export default function AiProviderPicker({ value, agents, running, disabled, onC
           id={listboxId}
           className="ai-picker-menu"
           role="listbox"
-          aria-label="Выберите AI-агента"
+          aria-label={t('aiPicker.aria')}
           onKeyDown={moveFocus}
         >
-          <div className="ai-picker-menu-label">AVAILABLE AGENTS</div>
+          <div className="ai-picker-menu-label">{t('aiPicker.available')}</div>
           {agents.map((agent, index) => {
             const presentation = AI_PROVIDER_PRESENTATION[agent.id]
             const selected = agent.id === value
@@ -136,14 +138,14 @@ export default function AiProviderPicker({ value, agents, running, disabled, onC
                 <span className="ai-picker-glyph" aria-hidden="true">{presentation.glyph}</span>
                 <span className="ai-picker-option-copy">
                   <strong>{presentation.label}</strong>
-                  <span>{presentation.maker}</span>
+                  <span>{agent.id === 'opencode' ? t('aiPicker.openSource') : presentation.maker}</span>
                 </span>
-                {running[agent.id] && <span className="ai-picker-live" title="Сессия запущена" />}
+                {running[agent.id] && <span className="ai-picker-live" title={t('aiPicker.running')} />}
                 <span className="ai-picker-check" aria-hidden="true">{selected ? '✓' : ''}</span>
               </button>
             )
           })}
-          <div className="ai-picker-menu-hint">Выбор переключает рабочий терминал</div>
+          <div className="ai-picker-menu-hint">{t('aiPicker.hint')}</div>
         </div>
       )}
     </div>

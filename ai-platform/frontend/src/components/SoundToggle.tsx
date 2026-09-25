@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { isSoundEnabled, setSoundEnabled, playChime } from '../services/notify'
+import { useLanguage } from '../i18n'
 
 /**
  * Mute switch for the notification chime. The setting lives in localStorage and is
@@ -7,6 +8,7 @@ import { isSoundEnabled, setSoundEnabled, playChime } from '../services/notify'
  */
 export default function SoundToggle() {
   const [enabled, setEnabled] = useState(isSoundEnabled)
+  const { t } = useLanguage()
 
   function toggle() {
     const next = !enabled
@@ -21,7 +23,7 @@ export default function SoundToggle() {
     <button
       className="nav-link"
       onClick={toggle}
-      title={enabled ? 'Звук уведомлений включён' : 'Звук уведомлений выключен'}
+      title={enabled ? t('sound.on') : t('sound.off')}
     >
       {enabled ? '🔔' : '🔕'}
     </button>

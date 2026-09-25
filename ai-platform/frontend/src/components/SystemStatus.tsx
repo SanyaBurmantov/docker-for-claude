@@ -5,6 +5,7 @@ import {
 } from '../services/api'
 import Modal from './Modal'
 import { useToast } from './Toast'
+import { useLanguage } from '../i18n'
 
 export default function SystemStatus() {
   const [status, setStatus] = useState<SystemStatusData | null>(null)
@@ -16,6 +17,7 @@ export default function SystemStatus() {
     'Notification' in window ? Notification.permission : 'unsupported'
   )
   const toast = useToast()
+  const { t } = useLanguage()
 
   const load = useCallback(async () => {
     try {
@@ -33,13 +35,13 @@ export default function SystemStatus() {
 
   async function handleUpdateClaude() {
     setUpdating(true)
-    toast('info', 'Updating Claude CLI — this can take a minute…')
+    toast('info', t('system.updating'))
     try {
       const version = await updateClaude()
-      toast('success', `Claude CLI updated: ${version}`)
+      toast('success', t('system.updated', { version }))
       await load()
     } catch (e) {
-      toast('error', `Update failed: ${e instanceof Error ? e.message : 'Unknown error'}`)
+      toast('error', t('system.updateFailed', { error: e instanceof Error ? e.message : t('common.unknownError') }))
     } finally {
       setUpdating(false)
     }
@@ -47,11 +49,11 @@ export default function SystemStatus() {
 
   async function openLogs(name: string) {
     setLogsFor(name)
-    setLogsText('Loading…')
+    setLogsText(t('system.logsLoading'))
     try {
-      setLogsText((await fetchContainerLogs(name)) || '(no output)')
+      setLogsText((await fetchContainerLogs(name)) || t('system.noOutput'))
     } catch (e) {
-      setLogsText(`Failed to load logs: ${e instanceof Error ? e.message : 'Unknown error'}`)
+      setLogsText(t('system.logsFailed', { error: e instanceof Error ? e.message : t('common.unknownError') }))
     }
   }
 
@@ -59,11 +61,14 @@ export default function SystemStatus() {
     setRestarting(true)
     try {
       await restartContainer(name)
-      toast('success', `${name} restarted${name === 'ai-gateway' ? ' (with claude & browser)' : ''}`)
+      toast('success', t('system.restarted', {
+        name,
+        extra: name === 'ai-gateway' ? t('system.gatewayExtra') : '',
+      }))
       await load()
       await openLogs(name)
     } catch (e) {
-      toast('error', `Restart failed: ${e instanceof Error ? e.message : 'Unknown error'}`)
+      toast('error', t('system.restartFailed', { error: e instanceof Error ? e.message : t('common.unknownError') }))
     } finally {
       setRestarting(false)
     }
@@ -73,13 +78,13 @@ export default function SystemStatus() {
     if (!('Notification' in window)) return
     const perm = await Notification.requestPermission()
     setNotifState(perm)
-    if (perm === 'granted') toast('success', 'Browser notifications enabled')
+    if (perm === 'granted') toast('success', t('system.notificationsEnabled'))
   }
 
   if (!status) {
     return (
       <div className="system-status">
-        <span className="system-status-item muted">System status unavailable</span>
+        <span className="system-status-item muted">{t('system.unavailable')}</span>
       </div>
     )
   }
@@ -87,39 +92,39 @@ export default function SystemStatus() {
   return (
     <div className="system-status">
       <span className="system-status-item">
-        Proxy:{' '}
+        {t('system.proxy')}{' '}
         {status.externalIp ? (
           <span className="status-ok">✓ {status.externalIp}</span>
         ) : (
-          <span className="status-bad">✗ no internet (kill switch?)</span>
+          <span className="status-bad">{t('system.noInternet')}</span>
         )}
       </span>
 
       <span className="system-status-item">
-        Claude auth:{' '}
+        {t('system.claudeAuth')}{' '}
         {status.claudeAuth ? (
-          <span className="status-ok">✓ authorized</span>
+          <span className="status-ok">{t('system.authorized')}</span>
         ) : (
           <span className="status-bad">
-            ✗ not authorized —{' '}
+            {t('system.notAuthorized')}{' '}
             <a href={novncUrl()} target="_blank" rel="noopener noreferrer">
-              login via noVNC
+              {t('system.loginNovnc')}
             </a>
           </span>
         )}
       </span>
 
       <span className="system-status-item">
-        CLI: {status.claudeVersion || 'unknown'}{' '}
+        CLI: {status.claudeVersion || t('system.unknown')}{' '}
         <button className="btn btn-secondary btn-sm" onClick={handleUpdateClaude} disabled={updating}>
-          {updating ? 'Updating…' : 'Update'}
+          {updating ? t('system.updatingShort') : t('system.update')}
         </button>
       </span>
 
       {notifState === 'default' && (
         <span className="system-status-item">
           <button className="btn btn-secondary btn-sm" onClick={enableNotifications}>
-            🔔 Enable notifications
+            {t('system.enableNotifications')}
           </button>
         </span>
       )}
@@ -129,7 +134,7 @@ export default function SystemStatus() {
           <button
             key={c.name}
             className={`container-chip ${c.state === 'running' ? 'chip-running' : 'chip-down'}`}
-            title={`${c.status || c.state} — click for logs`}
+            title={t('system.logsHint', { status: c.status || c.state })}
             onClick={() => openLogs(c.name)}
           >
             {c.name.replace(/^ai-/, '')}
@@ -138,15 +143,15 @@ export default function SystemStatus() {
       </span>
 
       {logsFor && (
-        <Modal title={`Logs: ${logsFor}`} onClose={() => setLogsFor(null)} wide>
+        <Modal title={t('system.logsTitle', { name: logsFor })} onClose={() => setLogsFor(null)} wide>
           <div className="modal-wide-body">
             <pre className="logs-view">{logsText}</pre>
             <div className="modal-actions">
               <button className="btn btn-secondary btn-sm" onClick={() => openLogs(logsFor)}>
-                Refresh
+                {t('common.refresh')}
               </button>
               <button className="btn btn-danger btn-sm" onClick={() => handleRestart(logsFor)} disabled={restarting}>
-                {restarting ? 'Restarting…' : 'Restart container'}
+                {restarting ? t('system.restarting') : t('system.restartContainer')}
               </button>
             </div>
           </div>

@@ -21,6 +21,7 @@ import MicButton, { appendTo } from '../components/MicButton'
 import Modal, { ConfirmDialog } from '../components/Modal'
 import { useToast } from '../components/Toast'
 import AiProviderPicker, { AI_PROVIDER_PRESENTATION } from '../components/AiProviderPicker'
+import { useLanguage } from '../i18n'
 
 /** Вкладка — это либо агент со своей сессией, либо один из остальных разделов. */
 type Tab = AgentId | 'shell' | 'tasks' | 'fixes' | 'diff' | 'files' | 'git'
@@ -54,11 +55,6 @@ function parseFindings(review: string): string[] {
     .filter((line) => findingSeverity(line))
     .map((line) => line.trim().replace(/^[-*]\s*/, ''))
 }
-
-/** Готовая задача для кнопки «Улучшить последнее» в модалке «With task…». */
-const POLISH_LAST_PROMPT =
-  'Посмотри последние 10 коммитов, нужно провести ревью и сделать всё человекочитаемым, ' +
-  'лаконичным, по принципам DRY, KISS, YAGNI.'
 
 const DEFAULT_AGENT: AgentId = 'claude'
 const FALLBACK_AGENT: AgentInfo = {
@@ -126,6 +122,7 @@ export default function ProjectPage() {
   const [credUser, setCredUser] = useState('')
   const [credToken, setCredToken] = useState('')
   const toast = useToast()
+  const { t } = useLanguage()
 
   /** Вкладка агента или один из остальных разделов. */
   const agentTab = isAgentId(activeTab) ? activeTab : null
@@ -221,7 +218,7 @@ export default function ProjectPage() {
       }),
       getGitStatus(id).then((s) => setCurrentBranch(s.branch)).catch(() => {}),
     ])
-      .catch((e) => setError(e instanceof Error ? e.message : 'Failed to load project'))
+      .catch((e) => setError(e instanceof Error ? e.message : t('project.loadFailed')))
       .finally(() => setLoading(false))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id])
@@ -243,13 +240,13 @@ export default function ProjectPage() {
       setBranches(branchInfo.branches)
       setCheckoutTarget(branchInfo.current)
     } catch {
-      setGitStatus('Failed to load git data')
+      setGitStatus(t('project.gitLoadFailed'))
       setGitDiff('')
       setGitLog([])
     } finally {
       setGitLoading(false)
     }
-  }, [id])
+  }, [id, t])
 
   useEffect(() => {
     if (activeTab === 'git' || activeTab === 'diff') {
@@ -265,7 +262,10 @@ export default function ProjectPage() {
       setRunning((prev) => ({ ...prev, [agent]: true }))
       selectAiProvider(agent)
     } catch (e) {
-      toast('error', `Не удалось запустить ${labelOf(agent)}: ${e instanceof Error ? e.message : 'Unknown error'}`)
+      toast('error', t('project.startFailed', {
+        agent: labelOf(agent),
+        error: e instanceof Error ? e.message : t('common.unknownError'),
+      }))
     } finally {
       setStartingAgent(null)
     }
@@ -275,7 +275,7 @@ export default function ProjectPage() {
     const agent = taskModalAgent
     if (!agent) return
     if (!taskPrompt.trim()) {
-      toast('error', 'Task text is required')
+      toast('error', t('project.taskRequired'))
       return
     }
     setTaskModalAgent(null)
@@ -302,7 +302,10 @@ export default function ProjectPage() {
       setRunning((prev) => ({ ...prev, [agent]: true }))
       selectAiProvider(agent)
     } catch (e) {
-      toast('error', `Не удалось перезапустить ${labelOf(agent)}: ${e instanceof Error ? e.message : 'Unknown error'}`)
+      toast('error', t('project.restartFailed', {
+        agent: labelOf(agent),
+        error: e instanceof Error ? e.message : t('common.unknownError'),
+      }))
     } finally {
       setStartingAgent(null)
     }
@@ -312,7 +315,7 @@ export default function ProjectPage() {
     // Refused up front: restarting kills the running session first, and an agent
     // that takes no task on the command line would leave the project with none.
     if (prompt && !supportsPrompt(agent)) {
-      toast('error', `${labelOf(agent)} нельзя запустить сразу с задачей`)
+      toast('error', t('project.promptUnsupported', { agent: labelOf(agent) }))
       return
     }
     if (isRunning(agent)) setPendingRestart({ agent, prompt })
@@ -325,7 +328,10 @@ export default function ProjectPage() {
       await stopSession(id, agent)
       setRunning((prev) => ({ ...prev, [agent]: false }))
     } catch (e) {
-      toast('error', `Не удалось остановить ${labelOf(agent)}: ${e instanceof Error ? e.message : 'Unknown error'}`)
+      toast('error', t('project.stopFailed', {
+        agent: labelOf(agent),
+        error: e instanceof Error ? e.message : t('common.unknownError'),
+      }))
     }
   }
 
@@ -335,7 +341,7 @@ export default function ProjectPage() {
     try {
       await pasteIntoSession(id, `${text} `, agent)
     } catch (e) {
-      toast('error', `Не удалось вставить в сессию: ${e instanceof Error ? e.message : 'Unknown error'}`)
+      toast('error', t('project.pasteFailed', { error: e instanceof Error ? e.message : t('common.unknownError') }))
     }
   }
 
@@ -343,11 +349,11 @@ export default function ProjectPage() {
     if (!id || !commitMessage.trim()) return
     try {
       await gitCommit(id, commitMessage.trim())
-      toast('success', 'Committed')
+      toast('success', t('project.committed'))
       setCommitMessage('')
       await loadGitData()
     } catch (e) {
-      toast('error', `Commit failed: ${e instanceof Error ? e.message : 'Unknown error'}`)
+      toast('error', t('project.commitFailed', { error: e instanceof Error ? e.message : t('common.unknownError') }))
     }
   }
 
@@ -358,7 +364,7 @@ export default function ProjectPage() {
     try {
       setCommitMessage(await generateCommitMessage(id, aiProvider))
     } catch (e) {
-      toast('error', `Не получилось составить сообщение: ${e instanceof Error ? e.message : 'Unknown error'}`)
+      toast('error', t('project.messageFailed', { error: e instanceof Error ? e.message : t('common.unknownError') }))
     } finally {
       setGeneratingMessage(false)
     }
@@ -368,11 +374,11 @@ export default function ProjectPage() {
     if (!id || !branchName.trim()) return
     try {
       await gitBranch(id, branchName.trim())
-      toast('success', `Switched to new branch ${branchName.trim()}`)
+      toast('success', t('project.branchCreated', { branch: branchName.trim() }))
       setBranchName('')
       await loadGitData()
     } catch (e) {
-      toast('error', `Branch failed: ${e instanceof Error ? e.message : 'Unknown error'}`)
+      toast('error', t('project.branchFailed', { error: e instanceof Error ? e.message : t('common.unknownError') }))
     }
   }
 
@@ -381,10 +387,10 @@ export default function ProjectPage() {
     setShowRollbackConfirm(false)
     try {
       await gitRollback(id)
-      toast('success', 'Uncommitted changes discarded')
+      toast('success', t('project.rolledBack'))
       await loadGitData()
     } catch (e) {
-      toast('error', `Rollback failed: ${e instanceof Error ? e.message : 'Unknown error'}`)
+      toast('error', t('project.rollbackFailed', { error: e instanceof Error ? e.message : t('common.unknownError') }))
     }
   }
 
@@ -393,10 +399,10 @@ export default function ProjectPage() {
     setGitBusy(true)
     try {
       await gitCheckout(id, checkoutTarget)
-      toast('success', `Switched to ${checkoutTarget}`)
+      toast('success', t('project.switched', { branch: checkoutTarget }))
       await loadGitData()
     } catch (e) {
-      toast('error', `Checkout failed: ${e instanceof Error ? e.message : 'Unknown error'}`)
+      toast('error', t('project.checkoutFailed', { error: e instanceof Error ? e.message : t('common.unknownError') }))
     } finally {
       setGitBusy(false)
     }
@@ -407,10 +413,10 @@ export default function ProjectPage() {
     setGitBusy(true)
     try {
       const output = await gitPull(id)
-      toast('success', output.split('\n').slice(-1)[0] || 'Pulled')
+      toast('success', output.split('\n').slice(-1)[0] || t('project.pulled'))
       await loadGitData()
     } catch (e) {
-      toast('error', `Pull failed: ${e instanceof Error ? e.message : 'Unknown error'}`)
+      toast('error', t('project.pullFailed', { error: e instanceof Error ? e.message : t('common.unknownError') }))
     } finally {
       setGitBusy(false)
     }
@@ -421,9 +427,9 @@ export default function ProjectPage() {
     setGitBusy(true)
     try {
       const output = await gitPush(id)
-      toast('success', output.split('\n').slice(-1)[0] || 'Pushed')
+      toast('success', output.split('\n').slice(-1)[0] || t('project.pushed'))
     } catch (e) {
-      toast('error', `Push failed: ${e instanceof Error ? e.message : 'Unknown error'}`)
+      toast('error', t('project.pushFailed', { error: e instanceof Error ? e.message : t('common.unknownError') }))
     } finally {
       setGitBusy(false)
     }
@@ -443,7 +449,7 @@ export default function ProjectPage() {
       await streamReview(id, aiProvider, (chunk) => setReview((prev) => prev + chunk), controller.signal)
     } catch (e) {
       if (controller.signal.aborted) return
-      setReviewError(e instanceof Error ? e.message : 'Unknown error')
+      setReviewError(e instanceof Error ? e.message : t('common.unknownError'))
     } finally {
       if (!controller.signal.aborted) {
         setReviewing(false)
@@ -466,7 +472,7 @@ export default function ProjectPage() {
     try {
       await streamDayLog(id, aiProvider, (chunk) => setDayLog((prev) => prev + chunk))
     } catch (e) {
-      setDayLogError(e instanceof Error ? e.message : 'Unknown error')
+      setDayLogError(e instanceof Error ? e.message : t('common.unknownError'))
     } finally {
       setDayLogLoading(false)
     }
@@ -491,15 +497,18 @@ export default function ProjectPage() {
       const fresh = findings.filter((text) => !existing.has(text.toLowerCase()))
 
       if (fresh.length === 0) {
-        toast('info', 'Все замечания уже в доработках')
+        toast('info', t('project.findingsExist'))
         return
       }
 
       await saveChecklistFile(id, FIXES_FILE, serialize(withTasksAdded(lines, fresh, FIXES_COPY.heading)))
       const skipped = findings.length - fresh.length
-      toast('success', `В доработки: ${fresh.length}${skipped > 0 ? ` (${skipped} уже были)` : ''}`)
+      toast('success', t('project.findingsAdded', {
+        count: fresh.length,
+        skipped: skipped > 0 ? t('project.findingsSkipped', { count: skipped }) : '',
+      }))
     } catch (e) {
-      toast('error', `Не сохранилось: ${e instanceof Error ? e.message : 'Unknown error'}`)
+      toast('error', t('project.saveFailed', { error: e instanceof Error ? e.message : t('common.unknownError') }))
     } finally {
       setSavingFindings(false)
     }
@@ -515,35 +524,35 @@ export default function ProjectPage() {
       const diff = await getGitShow(id, hash)
       setCommitView({ hash, diff })
     } catch (e) {
-      toast('error', `Failed to load commit: ${e instanceof Error ? e.message : 'Unknown error'}`)
+      toast('error', t('project.commitLoadFailed', { error: e instanceof Error ? e.message : t('common.unknownError') }))
     }
   }
 
   async function handleSaveCreds() {
     if (!credHost.trim() || !credUser.trim() || !credToken.trim()) {
-      toast('error', 'All fields are required')
+      toast('error', t('project.fieldsRequired'))
       return
     }
     try {
       await saveGitCredentials(credHost.trim(), credUser.trim(), credToken.trim())
-      toast('success', `Credentials for ${credHost.trim()} saved`)
+      toast('success', t('project.credentialsSaved', { host: credHost.trim() }))
       setShowCredsModal(false)
       setCredToken('')
     } catch (e) {
-      toast('error', `Failed to save: ${e instanceof Error ? e.message : 'Unknown error'}`)
+      toast('error', t('project.credentialsSaveFailed', { error: e instanceof Error ? e.message : t('common.unknownError') }))
     }
   }
 
   if (loading) {
-    return <div className="loading">Loading project...</div>
+    return <div className="loading">{t('project.loading')}</div>
   }
 
   if (error || !project) {
     return (
       <div>
-        <div className="error">{error || 'Project not found'}</div>
+        <div className="error">{error || t('project.notFound')}</div>
         <Link to="/" className="btn btn-secondary" style={{ marginTop: 16, display: 'inline-block' }}>
-          Back to Projects
+          {t('project.backToProjects')}
         </Link>
       </div>
     )
@@ -561,12 +570,12 @@ export default function ProjectPage() {
 
   const tabs: { key: Tab; label: string; running?: boolean }[] = [
     selectedAgentTab,
-    { key: 'shell', label: 'Shell' },
-    { key: 'diff', label: 'Diff' },
-    { key: 'files', label: 'Files' },
+    { key: 'shell', label: t('project.tabs.shell') },
+    { key: 'diff', label: t('project.tabs.diff') },
+    { key: 'files', label: t('project.tabs.files') },
     { key: 'git', label: 'Git' },
-    { key: 'tasks', label: 'Tasks' },
-    { key: 'fixes', label: 'Fixes' },
+    { key: 'tasks', label: t('project.tabs.tasks') },
+    { key: 'fixes', label: t('project.tabs.fixes') },
   ]
 
   // Тот же тулбар показывается и внутри полноэкранного терминала — оверлей перекрывает страницу,
@@ -574,15 +583,15 @@ export default function ProjectPage() {
   const projectToolbar = (
     <div className="project-toolbar">
       <div className="project-toolbar-left">
-        <Link to="/" className="btn btn-secondary btn-sm">← Back</Link>
+        <Link to="/" className="btn btn-secondary btn-sm">← {t('common.back')}</Link>
         <h2>{project.name}</h2>
-        {currentBranch && <span className="badge badge-git" title="Current branch">⎇ {currentBranch}</span>}
+        {currentBranch && <span className="badge badge-git" title={t('project.currentBranch')}>⎇ {currentBranch}</span>}
         {/* Запуском и остановкой заведует вкладка самого агента — здесь только сводка. */}
         <span className={anyRunning ? 'badge badge-running' : 'badge badge-offline'}>
           <span className={`status-indicator ${anyRunning ? 'running' : 'offline'}`} />
           {anyRunning
             ? agents.filter((a) => isRunning(a.id)).map((a) => a.label).join(', ')
-            : 'Offline'}
+            : t('common.offline')}
         </span>
         <AiProviderPicker
           value={aiProvider}
@@ -594,7 +603,7 @@ export default function ProjectPage() {
       </div>
       <div className="project-toolbar-right">
         {id && (
-          <a href={archiveUrl(id)} className="btn btn-secondary btn-sm" title="Скачать проект (без node_modules и .git)">
+          <a href={archiveUrl(id)} className="btn btn-secondary btn-sm" title={t('project.download')}>
             ⬇ .tar.gz
           </a>
         )}
@@ -604,7 +613,7 @@ export default function ProjectPage() {
           target="_blank"
           rel="noopener noreferrer"
         >
-          Open noVNC
+          {t('project.openNovnc')}
         </a>
       </div>
     </div>
@@ -621,7 +630,7 @@ export default function ProjectPage() {
             className={`tab ${activeTab === tab.key ? 'active' : ''}`}
             onClick={() => isAgentId(tab.key) ? selectAiProvider(tab.key) : setActiveTab(tab.key)}
           >
-            {tab.running && <span className="status-indicator running" title="Сессия запущена" />}
+            {tab.running && <span className="status-indicator running" title={t('aiPicker.running')} />}
             {tab.label}
           </button>
         ))}
@@ -650,18 +659,18 @@ export default function ProjectPage() {
                         {/* Надиктованное уходит в промпт агента, поэтому кнопка живёт у его терминала. */}
                         <MicButton
                           onText={(text) => handleDictateToSession(agent, text)}
-                          title={`Надиктовать в ${label}`}
+                          title={t('project.dictateTo', { agent: label })}
                         />
                         <button
                           className="btn btn-secondary btn-sm"
                           onClick={() => requestRestart(agent)}
                           disabled={busy}
-                          title={`Перезапустить ${label} с чистым контекстом — закрывает диалог и открывает заново`}
+                          title={t('project.restartCleanTitle', { agent: label })}
                         >
-                          ✦ Новая задача
+                          {t('project.newTask')}
                         </button>
                         <button className="btn btn-danger btn-sm" onClick={() => handleStopSession(agent)}>
-                          Stop
+                          {t('common.stop')}
                         </button>
                       </>
                     ) : (
@@ -671,7 +680,7 @@ export default function ProjectPage() {
                           onClick={() => handleStartSession(agent)}
                           disabled={busy}
                         >
-                          {busy ? 'Starting…' : `Start ${label}`}
+                          {busy ? t('project.starting') : t('project.startAgent', { agent: label })}
                         </button>
                         {supportsPrompt(agent) && (
                           <button
@@ -679,7 +688,7 @@ export default function ProjectPage() {
                             onClick={() => setTaskModalAgent(agent)}
                             disabled={busy}
                           >
-                            With task…
+                            {t('project.withTask')}
                           </button>
                         )}
                       </>
@@ -703,7 +712,7 @@ export default function ProjectPage() {
             file={TASKS_FILE}
             copy={TASKS_COPY}
             onDiscuss={(text) =>
-              requestRestart(lastAgent, `Давай обсудим задачу, пока ничего не меняя в коде: ${text}`)
+              requestRestart(lastAgent, t('project.discussTaskPrompt', { text }))
             }
           />
         )}
@@ -714,7 +723,7 @@ export default function ProjectPage() {
             file={FIXES_FILE}
             copy={FIXES_COPY}
             onDiscuss={(text) =>
-              requestRestart(lastAgent, `Давай обсудим замечание код-ревью, пока ничего не меняя в коде: ${text}`)
+              requestRestart(lastAgent, t('project.discussFixPrompt', { text }))
             }
           />
         )}
@@ -723,7 +732,7 @@ export default function ProjectPage() {
           <div>
             <div className="diff-controls">
               <button className="btn btn-secondary btn-sm" onClick={loadGitData}>
-                Refresh Diff
+                {t('project.refreshDiff')}
               </button>
             </div>
             <DiffViewer diff={gitDiff} projectId={id} provider={aiProvider} />
@@ -738,13 +747,13 @@ export default function ProjectPage() {
           <div className="git-section">
             <div className="git-controls">
               <button className="btn btn-secondary btn-sm" onClick={loadGitData} disabled={gitLoading}>
-                Refresh
+                {t('common.refresh')}
               </button>
               <button className="btn btn-secondary btn-sm" onClick={handlePull} disabled={gitBusy}>
-                ⇣ Pull
+                {t('project.pull')}
               </button>
               <button className="btn btn-primary btn-sm" onClick={handlePush} disabled={gitBusy}>
-                ⇡ Push
+                {t('project.push')}
               </button>
               {branches.length > 0 && (
                 <>
@@ -762,20 +771,20 @@ export default function ProjectPage() {
                     onClick={handleCheckout}
                     disabled={gitBusy || !checkoutTarget || checkoutTarget === currentBranch}
                   >
-                    Checkout
+                    {t('project.checkout')}
                   </button>
                 </>
               )}
               <button className="btn btn-secondary btn-sm" onClick={() => setShowCredsModal(true)}>
-                🔑 Credentials
+                {t('project.credentials')}
               </button>
             </div>
 
             <div>
-              <h3 className="section-title">Коммит</h3>
+              <h3 className="section-title">{t('project.commit')}</h3>
               <div className="git-controls">
                 <AutoGrowTextarea
-                  placeholder="Commit message..."
+                  placeholder={t('project.commitPlaceholder')}
                   value={commitMessage}
                   onChange={(e) => setCommitMessage(e.target.value)}
                   onKeyDown={(e) => {
@@ -794,27 +803,27 @@ export default function ProjectPage() {
                   className="btn btn-secondary btn-sm"
                   onClick={handleGenerateCommitMessage}
                   disabled={generatingMessage || !gitDiff}
-                  title={gitDiff ? `${providerLabel} напишет сообщение по диффу` : 'Нет изменений'}
+                  title={gitDiff ? t('project.generateMessageTitle', { provider: providerLabel }) : t('common.noChanges')}
                 >
-                  {generatingMessage ? 'Пишет…' : '✦ Создать сообщение'}
+                  {generatingMessage ? t('project.generatingMessage') : t('project.generateMessage')}
                 </button>
                 <button className="btn btn-primary btn-sm" onClick={handleCommit} disabled={generatingMessage}>
-                  Commit
+                  {t('project.commitAction')}
                 </button>
               </div>
             </div>
 
             <div>
-              <h3 className="section-title">Трудозатраты за день</h3>
+              <h3 className="section-title">{t('project.dayLog')}</h3>
               <div className="git-controls">
                 <AutoGrowTextarea
-                  placeholder="Отчёт о трудозатратах за день…"
+                  placeholder={t('project.dayLogPlaceholder')}
                   value={dayLog}
                   onChange={(e) => setDayLog(e.target.value)}
                   disabled={dayLogLoading}
                 />
                 <button className="btn btn-secondary btn-sm" onClick={handleDayLog} disabled={dayLogLoading}>
-                  {dayLogLoading ? 'Собираю…' : '✦ Сформировать'}
+                  {dayLogLoading ? t('project.dayLogLoading') : t('project.dayLogGenerate')}
                 </button>
               </div>
               {dayLogError && <div className="git-output review-error">{dayLogError}</div>}
@@ -822,29 +831,29 @@ export default function ProjectPage() {
 
             <div>
               <div className="review-header">
-                <h3 className="section-title">Review</h3>
+                <h3 className="section-title">{t('project.review')}</h3>
                 {!reviewing && findings.length > 0 && (
                   <button
                     className="btn btn-primary btn-sm"
                     onClick={handleFindingsToFixes}
                     disabled={savingFindings}
-                    title={`Записать в ${FIXES_FILE}`}
+                    title={t('project.saveToFile', { file: FIXES_FILE })}
                   >
-                    ➜ В доработки ({findings.length})
+                    {t('project.toFixes', { count: findings.length })}
                   </button>
                 )}
                 {reviewing ? (
                   <button className="btn btn-danger btn-sm" onClick={stopReview}>
-                    Stop
+                    {t('common.stop')}
                   </button>
                 ) : (
                   <button
                     className="btn btn-secondary btn-sm"
                     onClick={handleReview}
                     disabled={!gitDiff}
-                    title={gitDiff ? `${providerLabel} проверит дифф` : 'Нет изменений'}
+                    title={gitDiff ? t('project.reviewTitle', { provider: providerLabel }) : t('common.noChanges')}
                   >
-                    🔍 Проверить дифф
+                    {t('project.reviewDiff')}
                   </button>
                 )}
               </div>
@@ -861,50 +870,50 @@ export default function ProjectPage() {
                   {reviewing && <span className="chat-caret" />}
                 </div>
               ) : reviewing ? (
-                <div className="git-output review-waiting">{providerLabel} анализирует дифф…</div>
+                <div className="git-output review-waiting">{t('project.reviewing', { provider: providerLabel })}</div>
               ) : (
                 <div className="no-changes">
-                  Выбранный AI-провайдер просмотрит незакоммиченные изменения и назовёт проблемы
+                  {t('project.reviewEmpty')}
                 </div>
               )}
             </div>
 
             <div>
-              <h3 className="section-title">Diff</h3>
+              <h3 className="section-title">{t('project.diff')}</h3>
               {gitDiff ? (
                 <DiffViewer diff={gitDiff} projectId={id} provider={aiProvider} />
               ) : (
-                <div className="no-changes">No changes to show</div>
+                <div className="no-changes">{t('project.noChangesToShow')}</div>
               )}
             </div>
 
             <div>
-              <h3 className="section-title">Ветки</h3>
+              <h3 className="section-title">{t('project.branches')}</h3>
               <div className="git-controls">
                 <input
                   type="text"
-                  placeholder="Branch name..."
+                  placeholder={t('project.branchPlaceholder')}
                   value={branchName}
                   onChange={(e) => setBranchName(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && handleBranch()}
                 />
                 <button className="btn btn-warning btn-sm" onClick={handleBranch}>
-                  Create Branch
+                  {t('project.createBranch')}
                 </button>
                 <button className="btn btn-danger btn-sm" onClick={() => setShowRollbackConfirm(true)}>
-                  Rollback
+                  {t('project.rollback')}
                 </button>
               </div>
             </div>
 
             <div>
-              <h3 className="section-title">Log</h3>
+              <h3 className="section-title">{t('project.log')}</h3>
               {gitLog.length === 0 ? (
-                <div className="git-output">No commits yet</div>
+                <div className="git-output">{t('project.noCommits')}</div>
               ) : (
                 <div className="git-log">
                   {gitLog.map((line) => (
-                    <button key={line} className="git-log-entry" onClick={() => handleShowCommit(line)} title="Show commit diff">
+                    <button key={line} className="git-log-entry" onClick={() => handleShowCommit(line)} title={t('project.showCommit')}>
                       <span className="git-log-hash">{line.split(' ')[0]}</span>
                       <span>{line.slice(line.indexOf(' ') + 1)}</span>
                     </button>
@@ -914,8 +923,8 @@ export default function ProjectPage() {
             </div>
 
             <div>
-              <h3 className="section-title">Status</h3>
-              <div className="git-output">{gitStatus || 'No changes'}</div>
+              <h3 className="section-title">{t('project.status')}</h3>
+              <div className="git-output">{gitStatus || t('common.noChanges')}</div>
             </div>
           </div>
         )}
@@ -926,13 +935,13 @@ export default function ProjectPage() {
 
       {pendingRestart && (
         <ConfirmDialog
-          title="Сбросить контекст?"
+          title={t('project.resetContextTitle')}
           message={
             pendingRestart.prompt
-              ? `Текущая сессия ${labelOf(pendingRestart.agent)} будет закрыта, и он начнёт заново с этой задачей.`
-              : `Текущая сессия ${labelOf(pendingRestart.agent)} будет закрыта, и он откроется с чистым контекстом.`
+              ? t('project.resetContextTask', { agent: labelOf(pendingRestart.agent) })
+              : t('project.resetContextClean', { agent: labelOf(pendingRestart.agent) })
           }
-          confirmLabel="Перезапустить"
+          confirmLabel={t('project.restart')}
           onConfirm={() => {
             const { agent, prompt } = pendingRestart
             setPendingRestart(null)
@@ -944,9 +953,9 @@ export default function ProjectPage() {
 
       {showRollbackConfirm && (
         <ConfirmDialog
-          title="Rollback changes"
-          message="Discard all uncommitted changes in tracked files? Untracked files are kept."
-          confirmLabel="Discard"
+          title={t('project.rollbackTitle')}
+          message={t('project.rollbackMessage')}
+          confirmLabel={t('project.discard')}
           onConfirm={handleRollback}
           onCancel={() => setShowRollbackConfirm(false)}
         />
@@ -954,26 +963,26 @@ export default function ProjectPage() {
 
       {taskModalAgent && (
         <Modal
-          title={`Start ${labelOf(taskModalAgent)} with a task`}
+          title={t('project.startWithTaskTitle', { agent: labelOf(taskModalAgent) })}
           onClose={() => setTaskModalAgent(null)}
         >
           <div className="form-field">
-            <label>Task for {labelOf(taskModalAgent)}</label>
+            <label>{t('project.taskFor', { agent: labelOf(taskModalAgent) })}</label>
             <textarea
               className="task-textarea"
               value={taskPrompt}
               autoFocus
               rows={5}
-              placeholder="Опиши задачу — агент начнёт работать сразу после запуска…"
+              placeholder={t('project.taskPlaceholder')}
               onChange={(e) => setTaskPrompt(e.target.value)}
             />
             <MicButton onText={appendTo(setTaskPrompt)} />
             <button
               className="btn btn-secondary btn-sm"
-              onClick={() => setTaskPrompt(POLISH_LAST_PROMPT)}
-              title="Подставить готовую задачу на ревью последних коммитов"
+              onClick={() => setTaskPrompt(t('project.polishPrompt'))}
+              title={t('project.polishTitle')}
             >
-              Улучшить последнее
+              {t('project.polish')}
             </button>
           </div>
           {supportsContinue(taskModalAgent) && (
@@ -983,18 +992,18 @@ export default function ProjectPage() {
                 checked={taskContinue}
                 onChange={(e) => setTaskContinue(e.target.checked)}
               />
-              Continue previous conversation (--continue)
+              {t('project.continueConversation')}
             </label>
           )}
           <div className="modal-actions">
-            <button className="btn btn-secondary btn-sm" onClick={() => setTaskModalAgent(null)}>Cancel</button>
-            <button className="btn btn-success btn-sm" onClick={handleStartWithTask}>Start</button>
+            <button className="btn btn-secondary btn-sm" onClick={() => setTaskModalAgent(null)}>{t('common.cancel')}</button>
+            <button className="btn btn-success btn-sm" onClick={handleStartWithTask}>{t('common.start')}</button>
           </div>
         </Modal>
       )}
 
       {commitView && (
-        <Modal title={`Commit ${commitView.hash}`} onClose={() => setCommitView(null)} wide>
+        <Modal title={t('project.commitTitle', { hash: commitView.hash })} onClose={() => setCommitView(null)} wide>
           <div className="modal-wide-body">
             <DiffViewer diff={commitView.diff} projectId={id} />
           </div>
@@ -1002,25 +1011,25 @@ export default function ProjectPage() {
       )}
 
       {showCredsModal && (
-        <Modal title="Git credentials (HTTPS)" onClose={() => setShowCredsModal(false)}>
+        <Modal title={t('project.credentialsTitle')} onClose={() => setShowCredsModal(false)}>
           <p className="modal-hint">
-            Токен сохраняется внутри контейнера (volume claude-auth) и используется для push/pull/clone.
+            {t('project.credentialsHint')}
           </p>
           <div className="form-field">
-            <label>Host</label>
+            <label>{t('project.host')}</label>
             <input type="text" value={credHost} onChange={(e) => setCredHost(e.target.value)} placeholder="github.com" />
           </div>
           <div className="form-field">
-            <label>Username</label>
+            <label>{t('project.username')}</label>
             <input type="text" value={credUser} onChange={(e) => setCredUser(e.target.value)} placeholder="your-login" />
           </div>
           <div className="form-field">
-            <label>Token</label>
+            <label>{t('project.token')}</label>
             <input type="password" value={credToken} onChange={(e) => setCredToken(e.target.value)} placeholder="ghp_…" />
           </div>
           <div className="modal-actions">
-            <button className="btn btn-secondary btn-sm" onClick={() => setShowCredsModal(false)}>Cancel</button>
-            <button className="btn btn-primary btn-sm" onClick={handleSaveCreds}>Save</button>
+            <button className="btn btn-secondary btn-sm" onClick={() => setShowCredsModal(false)}>{t('common.cancel')}</button>
+            <button className="btn btn-primary btn-sm" onClick={handleSaveCreds}>{t('common.save')}</button>
           </div>
         </Modal>
       )}

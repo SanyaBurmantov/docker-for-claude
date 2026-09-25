@@ -1,4 +1,5 @@
 import { Project } from '../services/api'
+import { useLanguage } from '../i18n'
 
 interface ProjectCardProps {
   project: Project
@@ -10,6 +11,7 @@ interface ProjectCardProps {
 }
 
 export default function ProjectCard({ project, sessionRunning, attention, onOpen, onDelete, onToggleFavorite }: ProjectCardProps) {
+  const { t, locale } = useLanguage()
   return (
     <div className="project-card">
       <div className="project-card-head">
@@ -17,7 +19,7 @@ export default function ProjectCard({ project, sessionRunning, attention, onOpen
         <button
           className={`favorite-toggle ${project.favorite ? 'is-favorite' : ''}`}
           onClick={onToggleFavorite}
-          title={project.favorite ? 'Убрать из избранного' : 'В избранное'}
+          title={project.favorite ? t('projectCard.favoriteRemove') : t('projectCard.favoriteAdd')}
           aria-pressed={project.favorite}
         >
           {project.favorite ? '★' : '☆'}
@@ -27,33 +29,33 @@ export default function ProjectCard({ project, sessionRunning, attention, onOpen
       <div className="project-meta">
         <span>{project.size}</span>
         <span className={project.hasGit ? 'badge badge-git' : 'badge badge-no-git'}>
-          {project.hasGit ? 'git' : 'no git'}
+          {project.hasGit ? 'git' : t('projectCard.noGit')}
         </span>
         <span className={sessionRunning ? 'badge badge-running' : 'badge badge-offline'}>
           <span className={`status-indicator ${sessionRunning ? 'running' : 'offline'}`} />
-          {sessionRunning ? 'Running' : 'Offline'}
+          {sessionRunning ? t('common.running') : t('common.offline')}
         </span>
         {sessionRunning && attention === 'waiting' && (
-          <span className="badge badge-waiting">⏳ Claude ждёт</span>
+          <span className="badge badge-waiting">{t('projectCard.waiting')}</span>
         )}
         {project.lastOpened ? (
-          <span className="muted" title="Последнее открытие в платформе">
-            Открыт: {new Date(project.lastOpened).toLocaleString()}
+          <span className="muted" title={t('projectCard.lastOpenedTitle')}>
+            {t('projectCard.lastOpened', { date: new Date(project.lastOpened).toLocaleString(locale) })}
           </span>
         ) : (
           project.lastActivity && (
-            <span className="muted" title="Последнее изменение папки проекта">
-              Изменён: {new Date(project.lastActivity).toLocaleString()}
+            <span className="muted" title={t('projectCard.lastChangedTitle')}>
+              {t('projectCard.lastChanged', { date: new Date(project.lastActivity).toLocaleString(locale) })}
             </span>
           )
         )}
       </div>
       <div className="project-actions">
         <button className="btn btn-primary btn-sm" onClick={onOpen}>
-          Open
+          {t('projectCard.open')}
         </button>
         <button className="btn btn-danger btn-sm" onClick={onDelete}>
-          Delete
+          {t('common.delete')}
         </button>
       </div>
     </div>

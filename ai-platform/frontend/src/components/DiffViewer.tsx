@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { streamExplain, ExplainMode, AiProvider } from '../services/api'
+import { useLanguage } from '../i18n'
 
 interface DiffViewerProps {
   diff: string
@@ -17,11 +18,6 @@ interface Anchor {
 }
 
 const POPUP_WIDTH = 380
-
-const LABEL: Record<ExplainMode, string> = {
-  what: 'Что делает',
-  how: 'Как работает',
-}
 
 function lineClass(line: string): string {
   if (line.startsWith('+++') || line.startsWith('---')) return 'diff-line diff-file'
@@ -63,6 +59,7 @@ function locate(lines: string[], from: number): { file: string; hunk: string } {
 }
 
 export default function DiffViewer({ diff, projectId, provider = 'claude' }: DiffViewerProps) {
+  const { t } = useLanguage()
   const containerRef = useRef<HTMLDivElement>(null)
   const popupRef = useRef<HTMLDivElement>(null)
   const abortRef = useRef<AbortController | null>(null)
@@ -124,7 +121,7 @@ export default function DiffViewer({ diff, projectId, provider = 'claude' }: Dif
   }, [anchor, mode, dismiss])
 
   if (!diff.trim()) {
-    return <div className="no-changes">No changes detected</div>
+    return <div className="no-changes">{t('diff.noChanges')}</div>
   }
 
   const lines = diff.split('\n')
@@ -215,18 +212,18 @@ export default function DiffViewer({ diff, projectId, provider = 'claude' }: Dif
       {mode === null ? (
         <div className="diff-pop-actions">
           <button className="diff-pop-btn" onClick={() => ask('what')}>
-            {LABEL.what}
+            {t('diff.what')}
           </button>
           <button className="diff-pop-btn" onClick={() => ask('how')}>
-            {LABEL.how}
+            {t('diff.how')}
           </button>
         </div>
       ) : (
         <div className="diff-pop-card">
           <header className="diff-pop-head">
-            <span className="diff-pop-title">{LABEL[mode]}</span>
+            <span className="diff-pop-title">{t(mode === 'what' ? 'diff.what' : 'diff.how')}</span>
             {anchor.file && <span className="diff-pop-file">{anchor.file}</span>}
-            <button className="diff-pop-close" onClick={dismiss} aria-label="Закрыть">
+            <button className="diff-pop-close" onClick={dismiss} aria-label={t('common.close')}>
               ×
             </button>
           </header>
@@ -240,7 +237,7 @@ export default function DiffViewer({ diff, projectId, provider = 'claude' }: Dif
             </div>
           ) : (
             <div className="diff-pop-body diff-pop-waiting">
-              {mode === 'how' ? 'AI читает проект…' : 'AI думает…'}
+              {mode === 'how' ? t('diff.reading') : t('diff.thinking')}
             </div>
           )}
         </div>

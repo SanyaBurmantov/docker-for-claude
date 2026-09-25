@@ -46,11 +46,11 @@ docker compose -f docker-compose.dev.yml up -d
 - `components/Drawer.tsx` — **общая оболочка любой выдвижной панели**: таб на краю экрана, скрим, шапка с заголовком и крестиком, hotkey и Escape. Сторона — проп `side`, акцент и слот таба — класс `drawer-<id>`. Новую панель начинать отсюда.
 - `hooks/useChat.ts` → `useChat(sender)` — разговор чат-панели: история, ввод, стрим одного ответа, отмена. Куда идёт запрос, знает только `sender`.
 - `components/ChatDrawer.tsx` — `Drawer` + лента сообщений + композер с микрофоном. На нём построены обе чат-панели, так что различаются они только тем, кто отвечает.
-- `components/GeminiPanel.tsx` — Gemini (Ctrl+Shift+G): чистый текст-в/текст-из, дропдаун модели.
-- `components/ChatPanel.tsx` — чат с AI, Ctrl+Shift+K (глобально) и Ctrl+Shift+J (в проекте). У глобального чата свой переключатель Claude / GPT; проектный получает общий provider из шапки `ProjectPage`, которым пользуются и Git-действия.
+- `components/ChatPanel.tsx` — чат с AI, Ctrl+Shift+K (глобально) и Ctrl+Shift+J (в проекте). У глобального чата текстовый селектор Gemini / Claude / GPT; проектный получает общий provider из шапки `ProjectPage`, которым пользуются и Git-действия.
 - `components/Markdown.tsx` — рендер ответа модели (`react-markdown` + `remark-gfm`), стили — класс `.md-body`. Ответы приходят markdown'ом, поэтому в чат-панелях текст модели идёт через него, а сообщения пользователя и ошибки — как есть.
 - `hooks/useDrawer.ts` — состояние выдвижной панели, общее на все: панели делят края экрана, поэтому открытие одной закрывает остальные. Слоты табов задаются `--tab-slot` (шаг = `--tab-height`), ширина — `--drawer-width` на `.drawer-left|right`.
 - `components/MicButton.tsx` — кнопка микрофона: MediaRecorder → `/api/voice/transcribe` → текст в колбэк. Стоит в обеих чат-панелях, в коммит-сообщении, в модалке «With task…» и в тулбаре терминала агента (там надиктованное уходит в его промпт через `session/paste`). **Микрофону нужен secure context** — по http работает только на localhost.
+- `i18n.tsx` — общий RU/EN-словарь и `LanguageProvider`; выбор хранится в `localStorage` и синхронизируется между основным окном и VC overlay. Пользовательские строки в компонентах брать через `useLanguage().t`, а не добавлять напрямую.
 - `components/ScreenshotPanel.tsx` — `Drawer` справа (Ctrl+Shift+S): Ctrl+V/drag&drop загружает скриншот, «→ сессия» вставляет его путь в промпт запущенного агента через `tmux paste-buffer`.
 - `pages/VoiceCoachPage.tsx` — вкладка VC: VAD режет выбранный аудиопоток по паузам, `/api/voice/assist` анализирует сегменты, состояние публикуется в `voiceHelperState` для отдельного overlay-окна.
 

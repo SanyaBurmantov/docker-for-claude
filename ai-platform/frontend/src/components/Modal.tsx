@@ -1,5 +1,6 @@
 import { ReactNode, useEffect } from 'react'
 import { createPortal } from 'react-dom'
+import { useLanguage } from '../i18n'
 
 interface ModalProps {
   title: string
@@ -9,6 +10,7 @@ interface ModalProps {
 }
 
 export default function Modal({ title, children, onClose, wide }: ModalProps) {
+  const { t } = useLanguage()
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (e.key === 'Escape') onClose()
@@ -24,7 +26,7 @@ export default function Modal({ title, children, onClose, wide }: ModalProps) {
       <div className={`modal ${wide ? 'modal-wide' : ''}`} onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <h3>{title}</h3>
-          <button className="modal-close" onClick={onClose} aria-label="Close">×</button>
+          <button className="modal-close" onClick={onClose} aria-label={t('common.close')}>×</button>
         </div>
         <div className="modal-body">{children}</div>
       </div>
@@ -41,13 +43,14 @@ interface ConfirmDialogProps {
   onCancel: () => void
 }
 
-export function ConfirmDialog({ title, message, confirmLabel = 'Confirm', onConfirm, onCancel }: ConfirmDialogProps) {
+export function ConfirmDialog({ title, message, confirmLabel, onConfirm, onCancel }: ConfirmDialogProps) {
+  const { t } = useLanguage()
   return (
     <Modal title={title} onClose={onCancel}>
       <p style={{ marginBottom: 16 }}>{message}</p>
       <div className="modal-actions">
-        <button className="btn btn-secondary btn-sm" onClick={onCancel}>Cancel</button>
-        <button className="btn btn-danger btn-sm" onClick={onConfirm}>{confirmLabel}</button>
+        <button className="btn btn-secondary btn-sm" onClick={onCancel}>{t('common.cancel')}</button>
+        <button className="btn btn-danger btn-sm" onClick={onConfirm}>{confirmLabel ?? t('modal.confirm')}</button>
       </div>
     </Modal>
   )

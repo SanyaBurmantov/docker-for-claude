@@ -4,6 +4,7 @@ import Markdown from './Markdown'
 import MicButton, { appendTo } from './MicButton'
 import { Chat } from '../hooks/useChat'
 import { DrawerState } from '../hooks/useDrawer'
+import { useLanguage } from '../i18n'
 
 interface ChatDrawerProps {
   drawer: DrawerState
@@ -38,6 +39,7 @@ export default function ChatDrawer({
   streamNote,
   disabled,
 }: ChatDrawerProps) {
+  const { t } = useLanguage()
   const { entries, input, setInput, streaming, send, stop } = chat
   const scrollRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
@@ -82,7 +84,7 @@ export default function ChatDrawer({
               send()
             }
           }}
-          placeholder="Сообщение…"
+          placeholder={t('chat.placeholder')}
           rows={3}
           disabled={disabled}
         />
@@ -90,7 +92,7 @@ export default function ChatDrawer({
           <MicButton onText={appendTo(setInput)} disabled={streaming} />
           {streaming ? (
             <button className="btn btn-danger btn-sm" onClick={stop}>
-              Stop
+              {t('common.stop')}
             </button>
           ) : (
             <button
@@ -98,7 +100,7 @@ export default function ChatDrawer({
               onClick={send}
               disabled={!input.trim() || disabled}
             >
-              Send
+              {t('common.send')}
             </button>
           )}
         </div>

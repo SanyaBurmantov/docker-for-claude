@@ -11,6 +11,7 @@ import {
   VoiceHelperSnapshot,
 } from '../services/voiceHelperState'
 import { useToast } from '../components/Toast'
+import { useLanguage } from '../i18n'
 
 interface HistoryItem extends VoiceAssistResult {
   id: number
@@ -20,14 +21,6 @@ const SILENCE_MS = 1_300
 const MIN_SEGMENT_MS = 450
 const MAX_SEGMENT_MS = 45_000
 const MAX_HISTORY = 12
-
-const STAGE_LABEL: Record<VoiceHelperSnapshot['stage'], string> = {
-  off: 'Выключен',
-  listening: 'Слушаю',
-  hearing: 'Слышу речь',
-  thinking: 'Готовлю подсказку',
-  error: 'Ошибка',
-}
 
 function recorderOptions(): MediaRecorderOptions | undefined {
   const candidates = ['audio/webm;codecs=opus', 'audio/ogg;codecs=opus', 'audio/webm']
@@ -41,6 +34,7 @@ export default function VoiceCoachPage() {
   const [voiceStatus, setVoiceStatus] = useState<VoiceStatus | null>(null)
   const [level, setLevel] = useState(0)
   const toast = useToast()
+  const { t } = useLanguage()
 
   const snapshotRef = useRef(snapshot)
   const activeRef = useRef(false)
@@ -174,7 +168,7 @@ export default function VoiceCoachPage() {
       if (event.data.size) chunks.push(event.data)
     }
     recorder.onerror = () => {
-      patchSnapshot({ stage: 'error', error: 'Не удалось записать аудио' })
+      patchSnapshot({ stage: 'error', error: t('voice.recordFailed') })
     }
     recorder.onstop = () => {
       if (recorderRef.current === recorder) recorderRef.current = null
@@ -231,7 +225,7 @@ export default function VoiceCoachPage() {
   }
 
   async function capture(source: VoiceHelperSnapshot['source']): Promise<MediaStream> {
-    if (!navigator.mediaDevices) throw new Error('Захват звука недоступен в этом окне')
+    if (!navigator.mediaDevices) throw new Error(t('voice.captureUnavailable'))
 
     if (source === 'system') {
       if (window.aiDesktop?.platform === 'linux') {
@@ -248,7 +242,7 @@ export default function VoiceCoachPage() {
         ))
         if (!monitor) {
           throw new Error(
-            'Linux не опубликовал monitor-source. Включите Monitor of … в PulseAudio/PipeWire или используйте Microphone.'
+            t('voice.linuxMonitorMissing')
           )
         }
         return navigator.mediaDevices.getUserMedia({
@@ -262,13 +256,13 @@ export default function VoiceCoachPage() {
       }
 
       if (!navigator.mediaDevices.getDisplayMedia) {
-        throw new Error('Системный звук не поддерживается. Запустите desktop-приложение.')
+        throw new Error(t('voice.systemUnsupported'))
       }
       const display = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true })
       const audioTracks = display.getAudioTracks()
       if (audioTracks.length === 0) {
         display.getTracks().forEach((track) => track.stop())
-        throw new Error('Источник не отдал звук. Выберите экран/вкладку с передачей аудио.')
+        throw new Error(t('voice.noAudio'))
       }
       // Chromium couples loopback audio to a display capture. Keep its video
       // track alive but disabled; stopping it can also end audio on some hosts.
@@ -284,7 +278,7 @@ export default function VoiceCoachPage() {
 
   async function start() {
     if (!voiceStatus?.configured) {
-      toast('error', 'GEMINI_API_KEY не задан — Voice Helper не настроен')
+      toast('error', t('voice.notConfigured'))
       return
     }
 
@@ -331,37 +325,36 @@ export default function VoiceCoachPage() {
     <div className="voice-coach-page">
       <header className="voice-coach-hero">
         <div>
-          <div className="voice-eyebrow">LIVE CONVERSATION COPILOT</div>
+          <div className="voice-eyebrow">{t('voice.eyebrow')}</div>
           <h1>Voice Helper</h1>
-          <p>Слушает разговор и показывает короткий английский ответ, который можно сразу произнести.</p>
+          <p>{t('voice.description')}</p>
         </div>
         <div className={`voice-state voice-state-${snapshot.stage}`}>
           <span className="voice-state-dot" />
-          {STAGE_LABEL[snapshot.stage]}
+          {t(`voice.${snapshot.stage}`)}
         </div>
       </header>
 
       {!window.aiDesktop && (
         <div className="voice-notice">
-          В браузере подсказка откроется отдельным popup-окном. Режим поверх других программ и захват
-          системного звука надёжнее работают в desktop-приложении.
+          {t('voice.browserNotice')}
         </div>
       )}
 
       {voiceStatus && !configured && (
-        <div className="error">GEMINI_API_KEY не задан в .env — распознавание и ответы недоступны.</div>
+        <div className="error">{t('voice.keyMissing')}</div>
       )}
 
       <section className="voice-control-panel">
         <label className="voice-source-field">
-          <span>Источник звука</span>
+          <span>{t('voice.source')}</span>
           <select
             value={snapshot.source}
             disabled={snapshot.active}
             onChange={(event) => patchSnapshot({ source: event.target.value as VoiceHelperSnapshot['source'] })}
           >
-            <option value="microphone">Microphone</option>
-            <option value="system">System audio</option>
+            <option value="microphone">{t('voice.microphone')}</option>
+            <option value="system">{t('voice.systemAudio')}</option>
           </select>
         </label>
 
@@ -371,23 +364,23 @@ export default function VoiceCoachPage() {
           disabled={voiceStatus === null || (!configured && !snapshot.active)}
         >
           <span className="voice-help-icon">{snapshot.active ? '■' : '?'}</span>
-          <span>{snapshot.active ? 'STOP' : 'HELP'}</span>
+          <span>{snapshot.active ? t('voice.stop') : t('voice.help')}</span>
         </button>
 
-        <div className="voice-meter" aria-label={`Уровень звука ${level}%`}>
+        <div className="voice-meter" aria-label={t('voice.level', { level })}>
           <div className="voice-meter-fill" style={{ width: `${level}%` }} />
         </div>
 
         <div className="voice-control-actions">
-          <button className="btn btn-secondary btn-sm" onClick={openOverlay}>Открыть окно подсказки</button>
-          <button className="btn btn-secondary btn-sm" onClick={clear} disabled={!history.length}>Очистить</button>
+          <button className="btn btn-secondary btn-sm" onClick={openOverlay}>{t('voice.openOverlay')}</button>
+          <button className="btn btn-secondary btn-sm" onClick={clear} disabled={!history.length}>{t('common.clear')}</button>
         </div>
       </section>
 
       {snapshot.error && <div className="error voice-error">{snapshot.error}</div>}
 
       <section className="voice-current">
-        <div className="voice-current-label">Текущая подсказка</div>
+        <div className="voice-current-label">{t('voice.current')}</div>
         {snapshot.answer ? (
           <>
             <div className="voice-question">{snapshot.question}</div>
@@ -395,15 +388,15 @@ export default function VoiceCoachPage() {
           </>
         ) : (
           <div className="voice-placeholder">
-            Нажмите Help и начните разговор. После вопроса здесь появится готовый ответ на английском.
+            {t('voice.currentEmpty')}
           </div>
         )}
       </section>
 
       <section className="voice-history">
-        <h2>История</h2>
+        <h2>{t('voice.history')}</h2>
         {history.length === 0 ? (
-          <div className="voice-placeholder">Распознанные фрагменты появятся здесь.</div>
+          <div className="voice-placeholder">{t('voice.historyEmpty')}</div>
         ) : history.map((item) => (
           <article className="voice-history-item" key={item.id}>
             <div className="voice-transcript">{item.transcript}</div>

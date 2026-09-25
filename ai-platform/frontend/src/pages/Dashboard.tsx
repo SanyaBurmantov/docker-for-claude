@@ -6,6 +6,7 @@ import SystemStatus from '../components/SystemStatus'
 import Modal, { ConfirmDialog } from '../components/Modal'
 import { useToast } from '../components/Toast'
 import { useAttention } from '../components/ClaudeEvents'
+import { useLanguage } from '../i18n'
 
 /**
  * Recency of a project: when it was last opened here, or — for one never opened
@@ -32,6 +33,7 @@ export default function Dashboard() {
   const navigate = useNavigate()
   const toast = useToast()
   const attention = useAttention()
+  const { t } = useLanguage()
 
   const loadProjects = useCallback(async () => {
     try {
@@ -39,11 +41,11 @@ export default function Dashboard() {
       const data = await fetchProjects()
       setProjects(data)
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to load projects')
+      setError(e instanceof Error ? e.message : t('dashboard.loadFailed'))
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [t])
 
   useEffect(() => {
     loadProjects()
@@ -67,19 +69,19 @@ export default function Dashboard() {
       name = gitUrl.split('/').pop()?.replace(/\.git$/, '') ?? ''
     }
     if (!name) {
-      toast('error', 'Project name is required')
+      toast('error', t('dashboard.nameRequired'))
       return
     }
     setAdding(true)
     try {
       await addProject(name, gitUrl || undefined)
-      toast('success', gitUrl ? `Cloned ${name}` : `Created ${name}`)
+      toast('success', t(gitUrl ? 'dashboard.cloned' : 'dashboard.created', { name }))
       setShowAdd(false)
       setNewName('')
       setNewGitUrl('')
       await loadProjects()
     } catch (e) {
-      toast('error', `Failed to add project: ${e instanceof Error ? e.message : 'Unknown error'}`)
+      toast('error', t('dashboard.addFailed', { error: e instanceof Error ? e.message : t('common.unknownError') }))
     } finally {
       setAdding(false)
     }
@@ -89,10 +91,10 @@ export default function Dashboard() {
     setDeleteTarget(null)
     try {
       await deleteProject(id)
-      toast('success', `Deleted ${id}`)
+      toast('success', t('dashboard.deleted', { name: id }))
       await loadProjects()
     } catch (e) {
-      toast('error', `Failed to delete project: ${e instanceof Error ? e.message : 'Unknown error'}`)
+      toast('error', t('dashboard.deleteFailed', { error: e instanceof Error ? e.message : t('common.unknownError') }))
     }
   }
 
@@ -103,13 +105,13 @@ export default function Dashboard() {
     try {
       await setProjectFavorite(project.name, favorite)
     } catch (e) {
-      toast('error', `Не сохранилось: ${e instanceof Error ? e.message : 'Unknown error'}`)
+      toast('error', t('dashboard.saveFailed', { error: e instanceof Error ? e.message : t('common.unknownError') }))
       await loadProjects()
     }
   }
 
   if (loading && projects.length === 0) {
-    return <div className="loading">Loading projects...</div>
+    return <div className="loading">{t('dashboard.loading')}</div>
   }
 
   return (
@@ -117,19 +119,19 @@ export default function Dashboard() {
       <SystemStatus />
 
       <div className="dashboard-header">
-        <h1>Projects</h1>
-        <button className="btn btn-primary" onClick={() => setShowAdd(true)}>Add Project</button>
+        <h1>{t('dashboard.title')}</h1>
+        <button className="btn btn-primary" onClick={() => setShowAdd(true)}>{t('dashboard.add')}</button>
       </div>
 
       {error && <div className="error">{error}</div>}
 
       {projects.length === 0 ? (
-        <div className="no-changes">Place project folders in the directory configured in .env (PROJECTS_DIR), or add one above.</div>
+        <div className="no-changes">{t('dashboard.empty')}</div>
       ) : (
         <>
           {favorites.length > 0 && (
             <section className="project-group project-group-favorites">
-              <h2 className="project-group-title">★ Избранные</h2>
+              <h2 className="project-group-title">{t('dashboard.favorites')}</h2>
               <div className="projects-grid">
                 {favorites.map((project) => (
                   <ProjectCard
@@ -163,21 +165,21 @@ export default function Dashboard() {
       )}
 
       {showAdd && (
-        <Modal title="Add Project" onClose={() => !adding && setShowAdd(false)}>
+        <Modal title={t('dashboard.addTitle')} onClose={() => !adding && setShowAdd(false)}>
           <div className="form-field">
-            <label>Project name</label>
+            <label>{t('dashboard.projectName')}</label>
             <input
               type="text"
               value={newName}
               autoFocus
-              placeholder="my-project (optional if git URL is set)"
+              placeholder={t('dashboard.projectPlaceholder')}
               onChange={(e) => setNewName(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleAddProject()}
               disabled={adding}
             />
           </div>
           <div className="form-field">
-            <label>Git URL (optional — clones through the proxy)</label>
+            <label>{t('dashboard.gitUrl')}</label>
             <input
               type="text"
               value={newGitUrl}
@@ -189,10 +191,12 @@ export default function Dashboard() {
           </div>
           <div className="modal-actions">
             <button className="btn btn-secondary btn-sm" onClick={() => setShowAdd(false)} disabled={adding}>
-              Cancel
+              {t('common.cancel')}
             </button>
             <button className="btn btn-primary btn-sm" onClick={handleAddProject} disabled={adding}>
-              {adding ? (newGitUrl.trim() ? 'Cloning…' : 'Creating…') : 'Create'}
+              {adding
+                ? (newGitUrl.trim() ? t('dashboard.cloning') : t('dashboard.creating'))
+                : t('common.create')}
             </button>
           </div>
         </Modal>
@@ -200,9 +204,9 @@ export default function Dashboard() {
 
       {deleteTarget && (
         <ConfirmDialog
-          title="Delete project"
-          message={`Delete project "${deleteTarget}" and all its files? This cannot be undone.`}
-          confirmLabel="Delete"
+          title={t('dashboard.deleteTitle')}
+          message={t('dashboard.deleteMessage', { name: deleteTarget })}
+          confirmLabel={t('common.delete')}
           onConfirm={() => handleDeleteProject(deleteTarget)}
           onCancel={() => setDeleteTarget(null)}
         />
