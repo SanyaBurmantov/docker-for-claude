@@ -56,8 +56,11 @@ function firstStringField(obj: unknown, keys: string[], depth = 0): string | nul
     const v = rec[key];
     if (typeof v === 'string' && v.trim()) return v;
   }
-  for (const key of keys) {
-    const nested = firstStringField(rec[key], keys, depth + 1);
+  // The field may live under a schema-specific wrapper such as Codex's
+  // `item`. Walk every value, while still only accepting the text-like keys
+  // above as the result.
+  for (const value of Object.values(rec)) {
+    const nested = firstStringField(value, keys, depth + 1);
     if (nested) return nested;
   }
   return null;
@@ -66,7 +69,7 @@ function firstStringField(obj: unknown, keys: string[], depth = 0): string | nul
 const OPENCODE_TEXT_KEYS = ['text', 'content', 'message', 'delta', 'output'];
 
 /** Codex `exec --json` prints the same shape of thing: one JSON event per line. */
-function extractJsonlText(stdout: string): string {
+export function extractJsonlText(stdout: string): string {
   const candidates: string[] = [];
   for (const line of stdout.split('\n')) {
     const trimmed = line.trim();
@@ -90,13 +93,20 @@ function extractJsonlText(stdout: string): string {
  * Neither opencode nor codex streams into our SSE frames — the whole answer
  * arrives at once when the process exits.
  */
-function runContainerCli(bin: string, args: string[], q: EngineQuery, h: EngineHandlers): () => void {
+function runContainerCli(
+  bin: string,
+  args: string[],
+  q: EngineQuery,
+  h: EngineHandlers,
+  extraDockerArgs: string[] = []
+): () => void {
   const child = spawn('docker', [
     'exec',
     ...EXEC_USER_ARGS,
     '-w',
     q.project ? `/workspace/${q.project}` : '/workspace',
     ...UTF8_EXEC_ENV,
+    ...extraDockerArgs,
     CONTAINER_NAME,
     bin,
     ...args,
@@ -143,12 +153,28 @@ function runContainerCli(bin: string, args: string[], q: EngineQuery, h: EngineH
   };
 }
 
+export function opencodeRuntimeConfig(q: Pick<EngineQuery, 'readOnly' | 'disallowedTools'>): string | null {
+  if (q.disallowedTools) return JSON.stringify({ permission: 'deny' });
+  if (!q.readOnly) return null;
+  return JSON.stringify({
+    permission: {
+      '*': 'deny',
+      read: 'allow',
+      glob: 'allow',
+      grep: 'allow',
+      lsp: 'allow',
+    },
+  });
+}
+
 /** No `--append-system-prompt` equivalent is documented for opencode, so the system prompt rides in the message itself. */
 function runOpencode(q: EngineQuery, h: EngineHandlers): () => void {
   const fullPrompt = q.systemPrompt ? `${q.systemPrompt}\n\n${q.prompt}` : q.prompt;
   const args = ['run', fullPrompt, '--format', 'json', '-m', q.engine.model, '--auto'];
   if (q.sessionId) args.push('--session', q.sessionId);
-  return runContainerCli('opencode', args, q, h);
+  const runtimeConfig = opencodeRuntimeConfig(q);
+  const extraDockerArgs = runtimeConfig ? ['-e', `OPENCODE_CONFIG_CONTENT=${runtimeConfig}`] : [];
+  return runContainerCli('opencode', args, q, h, extraDockerArgs);
 }
 
 /**
@@ -159,17 +185,22 @@ function runOpencode(q: EngineQuery, h: EngineHandlers): () => void {
  * `q.sessionId` is ignored — codex names its own sessions and cannot be told an id.
  * An empty model means "whatever `config.toml` says".
  */
-function runCodex(q: EngineQuery, h: EngineHandlers): () => void {
+export function codexExecArgs(q: Pick<EngineQuery, 'prompt' | 'systemPrompt' | 'engine' | 'readOnly'>): string[] {
   const fullPrompt = q.systemPrompt ? `${q.systemPrompt}\n\n${q.prompt}` : q.prompt;
-  const args = [
+  return [
     'exec',
     '--json',
     '--skip-git-repo-check',
     ...(q.engine.model ? ['-m', q.engine.model] : []),
-    ...(q.readOnly ? ['-a', 'never', '-s', 'read-only'] : ['--dangerously-bypass-approvals-and-sandbox']),
+    // `--sandbox` belongs to `codex exec`; `-a` is a global Codex flag and is
+    // rejected in this position. approval_policy already lives in config.toml.
+    ...(q.readOnly ? ['-s', 'read-only'] : ['--dangerously-bypass-approvals-and-sandbox']),
     fullPrompt,
   ];
-  return runContainerCli('codex', args, q, h);
+}
+
+function runCodex(q: EngineQuery, h: EngineHandlers): () => void {
+  return runContainerCli('codex', codexExecArgs(q), q, h);
 }
 
 export function runEngine(q: EngineQuery, h: EngineHandlers): () => void {

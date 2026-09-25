@@ -1,6 +1,7 @@
 import { Router, type Request, type Response } from 'express';
 import { isValidProjectName } from '../services/projectService';
-import { streamClaude, READ_ONLY_TOOLS, NO_TOOLS } from '../services/claudeQuery';
+import { READ_ONLY_TOOLS, NO_TOOLS } from '../services/claudeQuery';
+import { parseAiProvider, runEngineWithFallback } from '../services/providerFallback';
 import { openSse } from '../services/sse';
 
 const router = Router({ mergeParams: true });
@@ -62,11 +63,12 @@ router.post('/', (req: Request<{ id: string }>, res: Response) => {
     return;
   }
 
-  const { mode, code, file, hunk } = req.body as {
+  const { mode, code, file, hunk, provider: rawProvider } = req.body as {
     mode?: unknown;
     code?: unknown;
     file?: unknown;
     hunk?: unknown;
+    provider?: unknown;
   };
 
   if (!isMode(mode)) {
@@ -81,21 +83,28 @@ router.post('/', (req: Request<{ id: string }>, res: Response) => {
     res.status(413).json({ error: `Selection is too large (max ${MAX_CODE_CHARS} characters)` });
     return;
   }
+  const provider = parseAiProvider(rawProvider);
+  if (!provider) {
+    res.status(400).json({ error: 'provider must be claude, codex or gemini' });
+    return;
+  }
 
   const prompt = buildPrompt(mode, code, file, hunk);
 
   let cancel = () => {};
   const sse = openSse(res, () => cancel());
 
-  cancel = streamClaude(
+  cancel = runEngineWithFallback(
     {
-      projectName,
+      project: projectName,
       prompt,
       systemPrompt: SYSTEM_PROMPT,
-      model: MODEL,
+      preferred: provider,
+      models: { claude: MODEL, codex: process.env.CODEX_EXPLAIN_MODEL || '' },
       timeoutMs: TIMEOUT_MS,
       // "how" needs to read the project; "what" answers from the selection alone.
       ...(mode === 'how' ? { allowedTools: READ_ONLY_TOOLS } : { disallowedTools: NO_TOOLS }),
+      readOnly: true,
     },
     {
       onText: (text) => sse.send({ text }),

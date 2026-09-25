@@ -2,7 +2,8 @@ import { Router, type Request, type Response } from 'express';
 import { execInContainer } from '../services/dockerService';
 import { isValidProjectName } from '../services/projectService';
 import { workingDiff } from '../services/gitService';
-import { runEngine } from '../services/engines';
+import { NO_TOOLS } from '../services/claudeQuery';
+import { parseAiProvider, runEngineWithFallback } from '../services/providerFallback';
 import { openSse } from '../services/sse';
 
 const router = Router({ mergeParams: true });
@@ -162,10 +163,8 @@ router.post('/push', async (req: Request<{ id: string }>, res: Response) => {
 
 // "Трудозатраты за день": summarise today's commits of the current git user
 // into three lines. Streams as SSE {text|error|done}, same shape as
-// review/explain. Claude does the summary; if it fails (no tokens/quota) any
-// opencode model takes over. No tools — this is a pure text-in/text-out job.
+// review/explain. No tools — this is a pure text-in/text-out job.
 const DAYLOG_CLAUDE_MODEL = process.env.DAYLOG_MODEL || 'sonnet';
-const DAYLOG_OPENCODE_MODEL = process.env.DAYLOG_OPENCODE_MODEL || 'dashscope/qwen-max';
 const DAYLOG_SYSTEM = [
   'Ты составляешь отчёт о трудозатратах за день по сообщениям git-коммитов сотрудника — для руководителя.',
   'Ответь по-русски, от 2 до 4 строк:  по существу, простыми словами без технического жаргона.',
@@ -175,6 +174,11 @@ const DAYLOG_SYSTEM = [
 
 router.get('/daylog', async (req: Request<{ id: string }>, res: Response) => {
   const project = req.params.id;
+  const provider = parseAiProvider(req.query.provider);
+  if (!provider) {
+    res.status(400).json({ error: 'provider must be claude, codex or gemini' });
+    return;
+  }
   let commits: string;
   try {
     // Whose commits to count: the identity `git commit` stamps on this repo.
@@ -208,31 +212,21 @@ router.get('/daylog', async (req: Request<{ id: string }>, res: Response) => {
     onDone: () => sse.finish({ done: true }),
   };
 
-  cancel = runEngine(
+  cancel = runEngineWithFallback(
     {
       project,
       prompt,
       systemPrompt: DAYLOG_SYSTEM,
-      engine: { engine: 'claude', model: DAYLOG_CLAUDE_MODEL },
+      preferred: provider,
+      models: { claude: DAYLOG_CLAUDE_MODEL, codex: process.env.CODEX_DAYLOG_MODEL || '' },
       role: 'manager',
       timeoutMs: 60_000,
+      readOnly: true,
+      disallowedTools: NO_TOOLS,
     },
     {
       ...relay,
-      // Claude out of tokens / unavailable — retry through opencode.
-      onError: () => {
-        cancel = runEngine(
-          {
-            project,
-            prompt,
-            systemPrompt: DAYLOG_SYSTEM,
-            engine: { engine: 'opencode', model: DAYLOG_OPENCODE_MODEL },
-            role: 'manager',
-            timeoutMs: 120_000,
-          },
-          { ...relay, onError: (m) => sse.finish({ error: m }) }
-        );
-      },
+      onError: (m) => sse.finish({ error: m }),
     }
   );
 });

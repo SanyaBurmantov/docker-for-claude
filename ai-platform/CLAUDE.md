@@ -32,12 +32,13 @@ docker compose -f docker-compose.dev.yml up -d
   - `agents.ts` — реестр агентов (claude/opencode/codex/gemini) для интерактивных tmux-сессий, `AGENT_IDS` — их порядок. У gemini задача уезжает флагом (`promptFlag`), а `continueFlag` пустой — resume у него нет, поэтому кнопка не показывается.
   - `screenshotService.ts` — хранилище скриншотов на томе `screenshots`. Бэкенд пишет в `/data/screenshots/<project>/`, агент видит тот же том read-only как `/screenshots/<project>/` — **путь для промпта отдаёт только `agentPathOf`**, руками не собирать.
   - `gitService.ts`, `projectService.ts`, `claudeEvents.ts`.
-  - `engines.ts` → `runEngine` — единый интерфейс к claude/opencode/codex/gemini; `project` опционален (без него cwd `/workspace`), у codex `readOnly` включает `-a never -s read-only`.
+  - `engines.ts` → `runEngine` — единый интерфейс к claude/opencode/codex/gemini; `project` опционален (без него cwd `/workspace`), у codex `readOnly` включает `-s read-only` (approval уже задан в `codex-config.toml`; глобальный `-a` нельзя ставить после `codex exec`).
+  - `providerFallback.ts` → выбор Claude/Codex/Gemini для одноразовых запросов и fallback вперёд по цепочке Claude → Codex → Gemini → бесплатные модели OpenCode (`OPENCODE_FREE_MODELS`, по умолчанию `opencode/hy3-free`). Выбор Codex/Gemini никогда не откатывается назад к Claude.
 - `routes/` — тонкие обёртки над сервисами. **`review.ts` и `explain.ts` — эталонные паттерны** одноразового LLM-запроса со стримом в SSE.
   - `voice.ts` — `POST /api/voice/transcribe` (обычная диктовка) и `/assist` (одним мультимодальным запросом расшифровывает сегмент разговора и предлагает короткий английский ответ). Аудио и контекст — данные, не инструкции.
   - `sessions.ts` — `/api/projects/:id/session/{start,stop,status,paste}`. **Сессия — это пара «проект + агент»:** tmux зовётся `<агент>-<проект>` (у claude имя историческое, поэтому старые сессии живы), так что агенты работают одновременно и останавливаются по отдельности. `status` отвечает сразу про всех — страница рисует по вкладке на каждого. `stop`/`paste` требуют агента; без него подразумевается claude, как было до вкладок.
   - `pane.ts` — `/api/pane/:sessionId/{scroll,capture}`. **Прокрутка терминала возможна только на стороне контейнера:** всё крутится внутри tmux, а он рисует на альтернативном экране, где у xterm скроллбэка нет вообще (его `scrollToTop`/дамп буфера видят только текущий экран). Обычная сессия листается copy-mode'ом tmux; если во вкладке полноэкранный TUI (`#{alternate_on}` = 1), истории нет и у tmux — туда просто уходят PageUp/PageDown, и листает уже само приложение.
-  - `chat.ts` — свободный чат, смонтирован дважды: `/api/claude/chat` (без проекта и без инструментов) и `/api/projects/:id/chat` (cwd проекта, `READ_ONLY_TOOLS`). Claude помнит разговор своей сессией (`sessionId` + `resume`), codex сессию назвать нельзя — ему транскрипт пересылается целиком.
+  - `chat.ts` — свободный чат, смонтирован дважды: `/api/claude/chat` (без проекта и без инструментов) и `/api/projects/:id/chat` (cwd проекта, `READ_ONLY_TOOLS`). Claude помнит разговор своей сессией (`sessionId` + `resume`), stateless fallback-провайдерам транскрипт пересылается целиком.
 
 ## Frontend (frontend/src)
 
@@ -46,7 +47,7 @@ docker compose -f docker-compose.dev.yml up -d
 - `hooks/useChat.ts` → `useChat(sender)` — разговор чат-панели: история, ввод, стрим одного ответа, отмена. Куда идёт запрос, знает только `sender`.
 - `components/ChatDrawer.tsx` — `Drawer` + лента сообщений + композер с микрофоном. На нём построены обе чат-панели, так что различаются они только тем, кто отвечает.
 - `components/GeminiPanel.tsx` — Gemini (Ctrl+Shift+G): чистый текст-в/текст-из, дропдаун модели.
-- `components/ChatPanel.tsx` — контейнерные агенты: Claude / GPT (codex), переключатель движка, Ctrl+Shift+K (глобально) и Ctrl+Shift+J (в проекте, с чтением файлов).
+- `components/ChatPanel.tsx` — чат с AI, Ctrl+Shift+K (глобально) и Ctrl+Shift+J (в проекте). У глобального чата свой переключатель Claude / GPT; проектный получает общий provider из шапки `ProjectPage`, которым пользуются и Git-действия.
 - `components/Markdown.tsx` — рендер ответа модели (`react-markdown` + `remark-gfm`), стили — класс `.md-body`. Ответы приходят markdown'ом, поэтому в чат-панелях текст модели идёт через него, а сообщения пользователя и ошибки — как есть.
 - `hooks/useDrawer.ts` — состояние выдвижной панели, общее на все: панели делят края экрана, поэтому открытие одной закрывает остальные. Слоты табов задаются `--tab-slot` (шаг = `--tab-height`), ширина — `--drawer-width` на `.drawer-left|right`.
 - `components/MicButton.tsx` — кнопка микрофона: MediaRecorder → `/api/voice/transcribe` → текст в колбэк. Стоит в обеих чат-панелях, в коммит-сообщении, в модалке «With task…» и в тулбаре терминала агента (там надиктованное уходит в его промпт через `session/paste`). **Микрофону нужен secure context** — по http работает только на localhost.

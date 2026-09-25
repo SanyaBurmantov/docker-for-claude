@@ -123,6 +123,8 @@ services:
       - REVIEW_TIMEOUT_MS=${REVIEW_TIMEOUT_MS:-240000}
       - COMMIT_MESSAGE_MODEL=${COMMIT_MESSAGE_MODEL:-sonnet}
       - COMMIT_MESSAGE_TIMEOUT_MS=${COMMIT_MESSAGE_TIMEOUT_MS:-90000}
+      # Last-resort providers for one-shot AI features, tried left to right.
+      - OPENCODE_FREE_MODELS=${OPENCODE_FREE_MODELS:-opencode/hy3-free}
       # backend sits on app-net with direct egress, so unlike the claude/browser
       # containers it is not transparently proxied — it dials the proxy itself
       - PROXY_HOST=${PROXY_HOST}

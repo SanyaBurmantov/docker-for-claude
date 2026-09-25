@@ -7,7 +7,7 @@ import {
   saveGitCredentials, archiveUrl, streamReview, streamDayLog, generateCommitMessage,
   fetchChecklistFile, saveChecklistFile, TASKS_FILE, FIXES_FILE,
   fetchAgents, isAgentId, AgentId, AgentInfo, pasteIntoSession,
-  Project, novncUrl, StartSessionOptions,
+  Project, novncUrl, StartSessionOptions, AiProvider,
 } from '../services/api'
 import { parseTasks, serialize, withTasksAdded } from '../services/checklist'
 import TerminalComponent from '../components/Terminal'
@@ -60,6 +60,15 @@ const POLISH_LAST_PROMPT =
   'лаконичным, по принципам DRY, KISS, YAGNI.'
 
 const DEFAULT_AGENT: AgentId = 'claude'
+const AI_PROVIDER_LABEL: Record<AiProvider, string> = {
+  claude: 'Claude',
+  codex: 'Codex',
+  gemini: 'Gemini',
+}
+
+function isAiProvider(value: unknown): value is AiProvider {
+  return value === 'claude' || value === 'codex' || value === 'gemini'
+}
 
 export default function ProjectPage() {
   const { id } = useParams<{ id: string }>()
@@ -77,6 +86,10 @@ export default function ProjectPage() {
   /** Последняя открытая вкладка агента: к ней относятся скриншоты и «обсудить» из чеклистов. */
   const [lastAgent, setLastAgent] = useState<AgentId>(DEFAULT_AGENT)
   const [generatingMessage, setGeneratingMessage] = useState(false)
+  const [aiProvider, setAiProvider] = useState<AiProvider>(() => {
+    const saved = localStorage.getItem('project-ai-provider') ?? localStorage.getItem('git-ai-provider')
+    return isAiProvider(saved) ? saved : 'claude'
+  })
   const [gitStatus, setGitStatus] = useState('')
   const [currentBranch, setCurrentBranch] = useState('')
   const [gitDiff, setGitDiff] = useState('')
@@ -125,6 +138,10 @@ export default function ProjectPage() {
   useEffect(() => {
     if (id) localStorage.setItem(`active-tab-/project/${id}`, activeTab)
   }, [activeTab, id])
+
+  useEffect(() => {
+    localStorage.setItem('project-ai-provider', aiProvider)
+  }, [aiProvider])
 
   // Скриншоты и «обсудить» из чеклистов адресуются агенту, у которого человек был.
   useEffect(() => {
@@ -316,7 +333,7 @@ export default function ProjectPage() {
     if (!id || generatingMessage) return
     setGeneratingMessage(true)
     try {
-      setCommitMessage(await generateCommitMessage(id))
+      setCommitMessage(await generateCommitMessage(id, aiProvider))
     } catch (e) {
       toast('error', `Не получилось составить сообщение: ${e instanceof Error ? e.message : 'Unknown error'}`)
     } finally {
@@ -400,7 +417,7 @@ export default function ProjectPage() {
     reviewAbortRef.current = controller
 
     try {
-      await streamReview(id, (chunk) => setReview((prev) => prev + chunk), controller.signal)
+      await streamReview(id, aiProvider, (chunk) => setReview((prev) => prev + chunk), controller.signal)
     } catch (e) {
       if (controller.signal.aborted) return
       setReviewError(e instanceof Error ? e.message : 'Unknown error')
@@ -424,7 +441,7 @@ export default function ProjectPage() {
     setDayLogError('')
     setDayLogLoading(true)
     try {
-      await streamDayLog(id, (chunk) => setDayLog((prev) => prev + chunk))
+      await streamDayLog(id, aiProvider, (chunk) => setDayLog((prev) => prev + chunk))
     } catch (e) {
       setDayLogError(e instanceof Error ? e.message : 'Unknown error')
     } finally {
@@ -542,6 +559,20 @@ export default function ProjectPage() {
             ? agents.filter((a) => isRunning(a.id)).map((a) => a.label).join(', ')
             : 'Offline'}
         </span>
+        <label className="ai-provider-control">
+          <span>AI</span>
+          <select
+            className="ai-provider-select"
+            value={aiProvider}
+            onChange={(e) => setAiProvider(e.target.value as AiProvider)}
+            disabled={generatingMessage || reviewing || dayLogLoading}
+            title="AI для чата проекта и Git. При ошибке платформа попробует резервных провайдеров."
+          >
+            {(Object.entries(AI_PROVIDER_LABEL) as [AiProvider, string][]).map(([value, label]) => (
+              <option key={value} value={value}>{label}</option>
+            ))}
+          </select>
+        </label>
       </div>
       <div className="project-toolbar-right">
         {id && (
@@ -677,7 +708,7 @@ export default function ProjectPage() {
                 Refresh Diff
               </button>
             </div>
-            <DiffViewer diff={gitDiff} projectId={id} />
+            <DiffViewer diff={gitDiff} projectId={id} provider={aiProvider} />
           </div>
         )}
 
@@ -745,7 +776,7 @@ export default function ProjectPage() {
                   className="btn btn-secondary btn-sm"
                   onClick={handleGenerateCommitMessage}
                   disabled={generatingMessage || !gitDiff}
-                  title={gitDiff ? 'Claude напишет сообщение по диффу' : 'Нет изменений'}
+                  title={gitDiff ? `${AI_PROVIDER_LABEL[aiProvider]} напишет сообщение по диффу` : 'Нет изменений'}
                 >
                   {generatingMessage ? 'Пишет…' : '✦ Создать сообщение'}
                 </button>
@@ -793,7 +824,7 @@ export default function ProjectPage() {
                     className="btn btn-secondary btn-sm"
                     onClick={handleReview}
                     disabled={!gitDiff}
-                    title={gitDiff ? 'Claude проверит дифф' : 'Нет изменений'}
+                    title={gitDiff ? `${AI_PROVIDER_LABEL[aiProvider]} проверит дифф` : 'Нет изменений'}
                   >
                     🔍 Проверить дифф
                   </button>
@@ -812,10 +843,10 @@ export default function ProjectPage() {
                   {reviewing && <span className="chat-caret" />}
                 </div>
               ) : reviewing ? (
-                <div className="git-output review-waiting">Claude читает дифф и файлы проекта…</div>
+                <div className="git-output review-waiting">{AI_PROVIDER_LABEL[aiProvider]} анализирует дифф…</div>
               ) : (
                 <div className="no-changes">
-                  Claude просмотрит незакоммиченные изменения и назовёт проблемы
+                  Выбранный AI-провайдер просмотрит незакоммиченные изменения и назовёт проблемы
                 </div>
               )}
             </div>
@@ -823,7 +854,7 @@ export default function ProjectPage() {
             <div>
               <h3 className="section-title">Diff</h3>
               {gitDiff ? (
-                <DiffViewer diff={gitDiff} projectId={id} />
+                <DiffViewer diff={gitDiff} projectId={id} provider={aiProvider} />
               ) : (
                 <div className="no-changes">No changes to show</div>
               )}
@@ -873,7 +904,7 @@ export default function ProjectPage() {
       </div>
 
       {id && <ScreenshotPanel projectId={id} agent={lastAgent} sessionRunning={isRunning(lastAgent)} />}
-      {id && <ChatPanel projectId={id} />}
+      {id && <ChatPanel key={aiProvider} projectId={id} provider={aiProvider} />}
 
       {pendingRestart && (
         <ConfirmDialog

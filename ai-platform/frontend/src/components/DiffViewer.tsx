@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { streamExplain, ExplainMode } from '../services/api'
+import { streamExplain, ExplainMode, AiProvider } from '../services/api'
 
 interface DiffViewerProps {
   diff: string
   projectId?: string
+  provider?: AiProvider
 }
 
 interface Anchor {
@@ -61,7 +62,7 @@ function locate(lines: string[], from: number): { file: string; hunk: string } {
   return { file: '', hunk }
 }
 
-export default function DiffViewer({ diff, projectId }: DiffViewerProps) {
+export default function DiffViewer({ diff, projectId, provider = 'claude' }: DiffViewerProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const popupRef = useRef<HTMLDivElement>(null)
   const abortRef = useRef<AbortController | null>(null)
@@ -188,7 +189,7 @@ export default function DiffViewer({ diff, projectId }: DiffViewerProps) {
     try {
       await streamExplain(
         projectId,
-        { mode: next, code: anchor.code, file: anchor.file, hunk: anchor.hunk },
+        { mode: next, code: anchor.code, file: anchor.file, hunk: anchor.hunk, provider },
         (chunk) => setAnswer((prev) => prev + chunk),
         controller.signal
       )
@@ -239,7 +240,7 @@ export default function DiffViewer({ diff, projectId }: DiffViewerProps) {
             </div>
           ) : (
             <div className="diff-pop-body diff-pop-waiting">
-              {mode === 'how' ? 'Claude читает проект…' : 'Claude думает…'}
+              {mode === 'how' ? 'AI читает проект…' : 'AI думает…'}
             </div>
           )}
         </div>

@@ -30,6 +30,7 @@ export interface ClaudeEvent {
 }
 
 export type AgentId = 'claude' | 'opencode' | 'codex' | 'gemini'
+export type AiProvider = 'claude' | 'codex' | 'gemini'
 
 const AGENT_IDS: readonly AgentId[] = ['claude', 'opencode', 'codex', 'gemini']
 
@@ -265,10 +266,11 @@ export function gitPush(id: string): Promise<string> {
   return request<{ output: string }>(`/api/projects/${id}/git/push`, { method: 'POST' }).then((r) => r.output)
 }
 
-/** Asks Claude for a one-line commit message describing the uncommitted diff. */
-export function generateCommitMessage(id: string, signal?: AbortSignal): Promise<string> {
+/** Asks the selected provider for a one-line commit message describing the diff. */
+export function generateCommitMessage(id: string, provider: AiProvider, signal?: AbortSignal): Promise<string> {
   return request<{ message: string }>(`/api/projects/${id}/commit-message`, {
     method: 'POST',
+    body: JSON.stringify({ provider }),
     signal,
   }).then((r) => r.message)
 }
@@ -383,7 +385,7 @@ export interface ChatStatus {
   models: string[]
 }
 
-export type ChatEngine = 'claude' | 'codex'
+export type ChatEngine = AiProvider
 
 /** Global chat has no project; the project one runs in that project's directory. */
 function chatBase(projectId?: string): string {
@@ -419,8 +421,13 @@ export async function streamChat(
 }
 
 /** Streams a 2-4 line summary of this project's commits made today. */
-export async function streamDayLog(id: string, onText: (chunk: string) => void, signal?: AbortSignal): Promise<void> {
-  const res = await fetch(`/api/projects/${id}/git/daylog`, { signal })
+export async function streamDayLog(
+  id: string,
+  provider: AiProvider,
+  onText: (chunk: string) => void,
+  signal?: AbortSignal
+): Promise<void> {
+  const res = await fetch(`/api/projects/${id}/git/daylog?provider=${encodeURIComponent(provider)}`, { signal })
   await consumeTextStream(res, onText)
 }
 
@@ -432,9 +439,10 @@ export interface ExplainRequest {
   code: string
   file?: string
   hunk?: string
+  provider?: AiProvider
 }
 
-/** Asks Claude, running inside the project directory, about a diff selection. */
+/** Asks the selected provider about a diff selection. */
 export async function streamExplain(
   projectId: string,
   body: ExplainRequest,
@@ -450,15 +458,17 @@ export async function streamExplain(
   await consumeTextStream(res, onText)
 }
 
-/** Streams Claude's review of the uncommitted diff. The backend reads the diff itself. */
+/** Streams the selected provider's review. The backend reads the diff itself. */
 export async function streamReview(
   projectId: string,
+  provider: AiProvider,
   onText: (chunk: string) => void,
   signal?: AbortSignal
 ): Promise<void> {
   const res = await fetch(`/api/projects/${projectId}/review`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ provider }),
     signal,
   })
   await consumeTextStream(res, onText)

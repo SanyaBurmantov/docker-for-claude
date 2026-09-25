@@ -1351,7 +1351,8 @@ button.nav-link {
   flex-shrink: 0;
 }
 
-.git-branch-select {
+.git-branch-select,
+.ai-provider-select {
   padding: 6px 10px;
   background: var(--bg-1);
   border: 1px solid var(--line);
@@ -1361,9 +1362,21 @@ button.nav-link {
   max-width: 220px;
 }
 
-.git-branch-select:focus {
+.git-branch-select:focus,
+.ai-provider-select:focus {
   outline: none;
   border-color: var(--cyan);
+}
+
+.ai-provider-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding-right: 4px;
+  color: var(--text-faint);
+  font-family: var(--font-display);
+  font-size: 0.7rem;
+  letter-spacing: 1.5px;
 }
 
 /* ============ STATES ============ */

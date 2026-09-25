@@ -1,7 +1,7 @@
 import { Router, type Request, type Response } from 'express';
 import { isValidProjectName } from '../services/projectService';
 import { READ_ONLY_TOOLS, NO_TOOLS } from '../services/claudeQuery';
-import { runEngine } from '../services/engines';
+import { parseAiProvider, runEngineWithFallback } from '../services/providerFallback';
 import { openSse } from '../services/sse';
 
 /**
@@ -79,24 +79,38 @@ router.post('/', (req: Request<{ id?: string }>, res: Response) => {
     return;
   }
 
-  const isCodex = engine === 'codex';
+  const provider = parseAiProvider(engine);
+  if (!provider) {
+    res.status(400).json({ error: 'engine must be claude, codex or gemini' });
+    return;
+  }
+  const keepsSession = provider === 'claude';
 
   let cancel = () => {};
   const sse = openSse(res, () => cancel());
 
-  cancel = runEngine(
+  cancel = runEngineWithFallback(
     {
       project,
-      prompt: isCodex ? renderTranscript(messages) : last.text,
+      prompt: last.text,
       systemPrompt: project ? PROJECT_SYSTEM_PROMPT : SYSTEM_PROMPT,
-      engine: {
-        engine: isCodex ? 'codex' : 'claude',
-        model: isCodex ? CODEX_MODEL : model && CLAUDE_MODELS.includes(model) ? model : DEFAULT_MODEL,
+      preferred: provider,
+      models: {
+        claude: model && CLAUDE_MODELS.includes(model) ? model : DEFAULT_MODEL,
+        codex: CODEX_MODEL,
       },
       timeoutMs: TIMEOUT_MS,
       ...(project ? { allowedTools: READ_ONLY_TOOLS } : { disallowedTools: NO_TOOLS }),
       readOnly: true,
-      ...(isCodex ? {} : { sessionId, resumeSession: Boolean(resume) }),
+      ...(keepsSession ? { sessionId, resumeSession: Boolean(resume) } : {}),
+      adapt: (query) => query.engine.engine === 'claude'
+        ? query
+        : {
+            ...query,
+            prompt: renderTranscript(messages),
+            sessionId: undefined,
+            resumeSession: false,
+          },
     },
     {
       onText: (text) => sse.send({ text }),

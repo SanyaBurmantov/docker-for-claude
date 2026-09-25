@@ -1,7 +1,8 @@
 import { Router, type Request, type Response } from 'express';
 import { isValidProjectName } from '../services/projectService';
 import { workingDiff } from '../services/gitService';
-import { streamClaude, NO_TOOLS } from '../services/claudeQuery';
+import { NO_TOOLS } from '../services/claudeQuery';
+import { parseAiProvider, runEngineWithFallback } from '../services/providerFallback';
 
 const router = Router({ mergeParams: true });
 
@@ -44,6 +45,12 @@ router.post('/', async (req: Request<{ id: string }>, res: Response) => {
     return;
   }
 
+  const provider = parseAiProvider(req.body?.provider);
+  if (!provider) {
+    res.status(400).json({ error: 'provider must be claude, codex or gemini' });
+    return;
+  }
+
   let diff: string;
   try {
     diff = await workingDiff(projectName);
@@ -72,15 +79,17 @@ router.post('/', async (req: Request<{ id: string }>, res: Response) => {
   let text = '';
   let settled = false;
 
-  const cancel = streamClaude(
+  const cancel = runEngineWithFallback(
     {
-      projectName,
+      project: projectName,
       prompt,
       systemPrompt: SYSTEM_PROMPT,
-      model: MODEL,
+      preferred: provider,
+      models: { claude: MODEL, codex: process.env.CODEX_COMMIT_MESSAGE_MODEL || '' },
       timeoutMs: TIMEOUT_MS,
       // The diff carries everything the message needs; reading files only slows it down.
       disallowedTools: NO_TOOLS,
+      readOnly: true,
     },
     {
       onText: (chunk) => {
@@ -96,7 +105,7 @@ router.post('/', async (req: Request<{ id: string }>, res: Response) => {
         settled = true;
         const message = firstLine(text);
         if (!message) {
-          res.status(502).json({ error: 'Claude вернул пустое сообщение' });
+          res.status(502).json({ error: 'AI-провайдер вернул пустое сообщение' });
           return;
         }
         res.json({ message });

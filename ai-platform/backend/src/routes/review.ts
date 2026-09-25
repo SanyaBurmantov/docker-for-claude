@@ -1,7 +1,8 @@
 import { Router, type Request, type Response } from 'express';
 import { isValidProjectName } from '../services/projectService';
 import { workingDiff } from '../services/gitService';
-import { streamClaude, READ_ONLY_TOOLS } from '../services/claudeQuery';
+import { READ_ONLY_TOOLS } from '../services/claudeQuery';
+import { parseAiProvider, runEngineWithFallback } from '../services/providerFallback';
 import { openSse } from '../services/sse';
 
 const router = Router({ mergeParams: true });
@@ -35,6 +36,12 @@ router.post('/', async (req: Request<{ id: string }>, res: Response) => {
     return;
   }
 
+  const provider = parseAiProvider(req.body?.provider);
+  if (!provider) {
+    res.status(400).json({ error: 'provider must be claude, codex or gemini' });
+    return;
+  }
+
   let diff: string;
   try {
     diff = await workingDiff(projectName);
@@ -65,14 +72,16 @@ router.post('/', async (req: Request<{ id: string }>, res: Response) => {
   let cancel = () => {};
   const sse = openSse(res, () => cancel());
 
-  cancel = streamClaude(
+  cancel = runEngineWithFallback(
     {
-      projectName,
+      project: projectName,
       prompt,
       systemPrompt: SYSTEM_PROMPT,
-      model: MODEL,
+      preferred: provider,
+      models: { claude: MODEL, codex: process.env.CODEX_REVIEW_MODEL || '' },
       timeoutMs: TIMEOUT_MS,
       allowedTools: READ_ONLY_TOOLS,
+      readOnly: true,
     },
     {
       onText: (text) => sse.send({ text }),
