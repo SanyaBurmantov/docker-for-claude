@@ -81,7 +81,7 @@ router.post('/', (req: Request<{ id?: string }>, res: Response) => {
 
   const provider = parseAiProvider(engine);
   if (!provider) {
-    res.status(400).json({ error: 'engine must be claude, codex or gemini' });
+    res.status(400).json({ error: 'engine must be claude, opencode, codex or gemini' });
     return;
   }
   const keepsSession = provider === 'claude';

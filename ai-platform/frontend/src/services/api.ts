@@ -30,7 +30,7 @@ export interface ClaudeEvent {
 }
 
 export type AgentId = 'claude' | 'opencode' | 'codex' | 'gemini'
-export type AiProvider = 'claude' | 'codex' | 'gemini'
+export type AiProvider = AgentId
 
 const AGENT_IDS: readonly AgentId[] = ['claude', 'opencode', 'codex', 'gemini']
 
@@ -400,7 +400,7 @@ export interface ChatRequest {
   messages: GeminiMessage[]
   engine: ChatEngine
   model: string
-  /** Claude keeps the history in this session; codex ignores it and re-reads the transcript. */
+  /** Claude keeps the history in this session; stateless providers re-read the transcript. */
   sessionId: string
   resume: boolean
 }

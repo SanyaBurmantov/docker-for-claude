@@ -38,7 +38,7 @@ router.post('/', async (req: Request<{ id: string }>, res: Response) => {
 
   const provider = parseAiProvider(req.body?.provider);
   if (!provider) {
-    res.status(400).json({ error: 'provider must be claude, codex or gemini' });
+    res.status(400).json({ error: 'provider must be claude, opencode, codex or gemini' });
     return;
   }
 

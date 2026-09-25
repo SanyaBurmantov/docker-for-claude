@@ -1,9 +1,10 @@
 import { runEngine, type EngineHandlers, type EngineQuery, type ExecutorRef } from './engines';
 
-export const AI_PROVIDERS = ['claude', 'codex', 'gemini'] as const;
+export const AI_PROVIDERS = ['claude', 'opencode', 'codex', 'gemini'] as const;
 export type AiProvider = (typeof AI_PROVIDERS)[number];
+const METERED_PROVIDERS = ['claude', 'codex', 'gemini'] as const;
 
-const PROVIDER_LABEL: Record<AiProvider | 'opencode', string> = {
+const PROVIDER_LABEL: Record<AiProvider, string> = {
   claude: 'Claude',
   codex: 'Codex',
   gemini: 'Gemini',
@@ -28,19 +29,21 @@ function configuredFreeModels(): string[] {
 /**
  * The explicitly selected provider always goes first. Providers before it are
  * not retried: choosing Codex must not silently spend Claude quota. OpenCode is
- * the final, key-free safety net and may contain several models to try in order.
+ * the final, key-free safety net; choosing it explicitly skips paid providers.
  */
 export function providerFallbackChain(
   preferred: AiProvider,
   models: Partial<Record<AiProvider, string>> = {},
   freeModels: string[] = configuredFreeModels()
 ): ExecutorRef[] {
-  const start = AI_PROVIDERS.indexOf(preferred);
-  const paid = AI_PROVIDERS.slice(start).map((engine) => ({
+  const free = freeModels.map((model) => ({ engine: 'opencode' as const, model }));
+  if (preferred === 'opencode') return free;
+
+  const start = METERED_PROVIDERS.indexOf(preferred);
+  const paid = METERED_PROVIDERS.slice(start).map((engine) => ({
     engine,
     model: models[engine] || '',
   }));
-  const free = freeModels.map((model) => ({ engine: 'opencode' as const, model }));
   return [...paid, ...free];
 }
 

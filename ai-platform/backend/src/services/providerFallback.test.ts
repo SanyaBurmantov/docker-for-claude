@@ -43,12 +43,15 @@ test('fallback starts at the selected provider and ends with free OpenCode model
     { engine: 'gemini', model: '' },
     { engine: 'opencode', model: 'opencode/free' },
   ]);
+  assert.deepEqual(providerFallbackChain('opencode', {}, ['opencode/free']), [
+    { engine: 'opencode', model: 'opencode/free' },
+  ]);
 });
 
 test('provider parsing is strict but remains backward compatible when omitted', () => {
   assert.equal(parseAiProvider(undefined), 'claude');
   assert.equal(parseAiProvider('gemini'), 'gemini');
-  assert.equal(parseAiProvider('opencode'), null);
+  assert.equal(parseAiProvider('opencode'), 'opencode');
 });
 
 test('OpenCode fallback cannot mutate a project during read-only requests', () => {

@@ -176,7 +176,7 @@ router.get('/daylog', async (req: Request<{ id: string }>, res: Response) => {
   const project = req.params.id;
   const provider = parseAiProvider(req.query.provider);
   if (!provider) {
-    res.status(400).json({ error: 'provider must be claude, codex or gemini' });
+    res.status(400).json({ error: 'provider must be claude, opencode, codex or gemini' });
     return;
   }
   let commits: string;

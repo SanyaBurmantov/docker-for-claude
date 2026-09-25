@@ -20,6 +20,7 @@ import ChatPanel from '../components/ChatPanel'
 import MicButton, { appendTo } from '../components/MicButton'
 import Modal, { ConfirmDialog } from '../components/Modal'
 import { useToast } from '../components/Toast'
+import AiProviderPicker, { AI_PROVIDER_PRESENTATION } from '../components/AiProviderPicker'
 
 /** Вкладка — это либо агент со своей сессией, либо один из остальных разделов. */
 type Tab = AgentId | 'shell' | 'tasks' | 'fixes' | 'diff' | 'files' | 'git'
@@ -60,14 +61,16 @@ const POLISH_LAST_PROMPT =
   'лаконичным, по принципам DRY, KISS, YAGNI.'
 
 const DEFAULT_AGENT: AgentId = 'claude'
-const AI_PROVIDER_LABEL: Record<AiProvider, string> = {
-  claude: 'Claude',
-  codex: 'Codex',
-  gemini: 'Gemini',
+const FALLBACK_AGENT: AgentInfo = {
+  id: DEFAULT_AGENT,
+  label: 'Claude Code',
+  version: '',
+  supportsPrompt: true,
+  supportsContinue: true,
 }
 
 function isAiProvider(value: unknown): value is AiProvider {
-  return value === 'claude' || value === 'codex' || value === 'gemini'
+  return isAgentId(value)
 }
 
 export default function ProjectPage() {
@@ -87,6 +90,7 @@ export default function ProjectPage() {
   const [lastAgent, setLastAgent] = useState<AgentId>(DEFAULT_AGENT)
   const [generatingMessage, setGeneratingMessage] = useState(false)
   const [aiProvider, setAiProvider] = useState<AiProvider>(() => {
+    if (isAiProvider(activeTab)) return activeTab
     const saved = localStorage.getItem('project-ai-provider') ?? localStorage.getItem('git-ai-provider')
     return isAiProvider(saved) ? saved : 'claude'
   })
@@ -134,6 +138,7 @@ export default function ProjectPage() {
   const supportsPrompt = (a: AgentId) => specOf(a)?.supportsPrompt ?? true
   // У Gemini нет resume — он всегда начинает разговор заново.
   const supportsContinue = (a: AgentId) => specOf(a)?.supportsContinue ?? true
+  const providerLabel = AI_PROVIDER_PRESENTATION[aiProvider].label
 
   useEffect(() => {
     if (id) localStorage.setItem(`active-tab-/project/${id}`, activeTab)
@@ -151,8 +156,26 @@ export default function ProjectPage() {
   // An agent missing from the container is not offered; an empty list means the
   // container is down, and the toolbar falls back to the Claude-only layout.
   useEffect(() => {
-    fetchAgents().then(setAgents).catch(() => setAgents([]))
+    fetchAgents()
+      .then((next) => {
+        setAgents(next)
+        const available = next.length ? next : [FALLBACK_AGENT]
+        const fallback = available[0].id
+        const hasAgent = (agent: AgentId) => available.some((item) => item.id === agent)
+        setAiProvider((current) => hasAgent(current) ? current : fallback)
+        setActiveTab((current) => isAgentId(current) && !hasAgent(current) ? fallback : current)
+      })
+      .catch(() => {
+        setAgents([])
+        setAiProvider(DEFAULT_AGENT)
+        setActiveTab((current) => isAgentId(current) ? DEFAULT_AGENT : current)
+      })
   }, [])
+
+  function selectAiProvider(provider: AiProvider) {
+    setAiProvider(provider)
+    setActiveTab(provider)
+  }
 
   const refreshSessions = useCallback(async () => {
     if (!id) return
@@ -192,7 +215,7 @@ export default function ProjectPage() {
 
         // «Open» с дашборда передаёт ?open=1: открываем первую вкладку и ничего не запускаем.
         if (searchParams.get('open')) {
-          setActiveTab(DEFAULT_AGENT)
+          selectAiProvider(DEFAULT_AGENT)
           setSearchParams({}, { replace: true })
         }
       }),
@@ -240,7 +263,7 @@ export default function ProjectPage() {
     try {
       await startSession(id, { agent, ...opts })
       setRunning((prev) => ({ ...prev, [agent]: true }))
-      setActiveTab(agent)
+      selectAiProvider(agent)
     } catch (e) {
       toast('error', `Не удалось запустить ${labelOf(agent)}: ${e instanceof Error ? e.message : 'Unknown error'}`)
     } finally {
@@ -277,7 +300,7 @@ export default function ProjectPage() {
       setRunning((prev) => ({ ...prev, [agent]: false }))
       await startSession(id, { agent, ...(prompt ? { prompt } : {}) })
       setRunning((prev) => ({ ...prev, [agent]: true }))
-      setActiveTab(agent)
+      selectAiProvider(agent)
     } catch (e) {
       toast('error', `Не удалось перезапустить ${labelOf(agent)}: ${e instanceof Error ? e.message : 'Unknown error'}`)
     } finally {
@@ -530,12 +553,14 @@ export default function ProjectPage() {
 
   // Агент, которого нет в контейнере, вкладки не получает; пустой список — контейнер
   // лежит, и тогда остаётся одна вкладка Claude, как было раньше.
+  const availableAgents = agents.length ? agents : [FALLBACK_AGENT]
   const agentTabs: { key: Tab; label: string; running: boolean }[] = (
-    agents.length ? agents : [{ id: DEFAULT_AGENT, label: 'Claude Code' } as AgentInfo]
+    availableAgents
   ).map((a) => ({ key: a.id, label: a.label, running: isRunning(a.id) }))
+  const selectedAgentTab = agentTabs.find((tab) => tab.key === aiProvider) ?? agentTabs[0]
 
   const tabs: { key: Tab; label: string; running?: boolean }[] = [
-    ...agentTabs,
+    selectedAgentTab,
     { key: 'shell', label: 'Shell' },
     { key: 'diff', label: 'Diff' },
     { key: 'files', label: 'Files' },
@@ -559,20 +584,13 @@ export default function ProjectPage() {
             ? agents.filter((a) => isRunning(a.id)).map((a) => a.label).join(', ')
             : 'Offline'}
         </span>
-        <label className="ai-provider-control">
-          <span>AI</span>
-          <select
-            className="ai-provider-select"
-            value={aiProvider}
-            onChange={(e) => setAiProvider(e.target.value as AiProvider)}
-            disabled={generatingMessage || reviewing || dayLogLoading}
-            title="AI для чата проекта и Git. При ошибке платформа попробует резервных провайдеров."
-          >
-            {(Object.entries(AI_PROVIDER_LABEL) as [AiProvider, string][]).map(([value, label]) => (
-              <option key={value} value={value}>{label}</option>
-            ))}
-          </select>
-        </label>
+        <AiProviderPicker
+          value={aiProvider}
+          agents={availableAgents}
+          running={running}
+          onChange={selectAiProvider}
+          disabled={generatingMessage || reviewing || dayLogLoading}
+        />
       </div>
       <div className="project-toolbar-right">
         {id && (
@@ -601,7 +619,7 @@ export default function ProjectPage() {
           <button
             key={tab.key}
             className={`tab ${activeTab === tab.key ? 'active' : ''}`}
-            onClick={() => setActiveTab(tab.key)}
+            onClick={() => isAgentId(tab.key) ? selectAiProvider(tab.key) : setActiveTab(tab.key)}
           >
             {tab.running && <span className="status-indicator running" title="Сессия запущена" />}
             {tab.label}
@@ -776,7 +794,7 @@ export default function ProjectPage() {
                   className="btn btn-secondary btn-sm"
                   onClick={handleGenerateCommitMessage}
                   disabled={generatingMessage || !gitDiff}
-                  title={gitDiff ? `${AI_PROVIDER_LABEL[aiProvider]} напишет сообщение по диффу` : 'Нет изменений'}
+                  title={gitDiff ? `${providerLabel} напишет сообщение по диффу` : 'Нет изменений'}
                 >
                   {generatingMessage ? 'Пишет…' : '✦ Создать сообщение'}
                 </button>
@@ -824,7 +842,7 @@ export default function ProjectPage() {
                     className="btn btn-secondary btn-sm"
                     onClick={handleReview}
                     disabled={!gitDiff}
-                    title={gitDiff ? `${AI_PROVIDER_LABEL[aiProvider]} проверит дифф` : 'Нет изменений'}
+                    title={gitDiff ? `${providerLabel} проверит дифф` : 'Нет изменений'}
                   >
                     🔍 Проверить дифф
                   </button>
@@ -843,7 +861,7 @@ export default function ProjectPage() {
                   {reviewing && <span className="chat-caret" />}
                 </div>
               ) : reviewing ? (
-                <div className="git-output review-waiting">{AI_PROVIDER_LABEL[aiProvider]} анализирует дифф…</div>
+                <div className="git-output review-waiting">{providerLabel} анализирует дифф…</div>
               ) : (
                 <div className="no-changes">
                   Выбранный AI-провайдер просмотрит незакоммиченные изменения и назовёт проблемы

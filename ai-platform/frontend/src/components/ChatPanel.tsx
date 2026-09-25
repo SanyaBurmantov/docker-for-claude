@@ -73,7 +73,7 @@ export default function ChatPanel({ projectId, provider }: Props) {
       label={projectId ? 'ПРОЕКТ' : 'CLAUDE'}
       hotkey={projectId ? 'j' : 'k'}
       chat={chat}
-      streamNote={engine === 'codex' && 'GPT отвечает целиком, без стрима — ждём…'}
+      streamNote={(engine === 'codex' || engine === 'opencode') && 'Агент отвечает целиком, без стрима — ждём…'}
       hint={
         <>
           {projectId
