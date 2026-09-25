@@ -2064,7 +2064,7 @@ button.nav-link {
 
 .drawer-tab {
   position: fixed;
-  top: 50%;
+  top: 43%;
   /* Slots are stacked around the middle of the edge; a fixed height keeps them
      from touching whatever the label's length turns out to be. */
   height: var(--tab-height);
