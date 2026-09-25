@@ -1,12 +1,14 @@
 import { useEffect, useRef, useState } from 'react'
 import ChatDrawer from './ChatDrawer'
-import { fetchChatStatus, streamChat, ChatEngine, ChatStatus } from '../services/api'
+import { fetchChatStatus, streamChat, AiProvider, ChatEngine, ChatStatus } from '../services/api'
 import { useChat } from '../hooks/useChat'
 import { useDrawer } from '../hooks/useDrawer'
 
 interface Props {
   /** Given: the chat runs inside that project and may read its files. Omitted: plain talk, no tools. */
   projectId?: string
+  /** Project pages own this selection so the chat and Git tools use the same provider. */
+  provider?: AiProvider
 }
 
 const ENGINES: { id: ChatEngine; label: string }[] = [
@@ -15,18 +17,18 @@ const ENGINES: { id: ChatEngine; label: string }[] = [
 ]
 
 /**
- * Chat drawer for the container agents — Claude (`claude -p`) and GPT (`codex exec`).
- * The history lives in a Claude session (`sessionId` + `resume`) instead of being
- * resent every turn, so long conversations stay cheap.
+ * Chat drawer for the selected AI provider. Claude keeps its native session;
+ * stateless providers receive the visible transcript from the backend.
  *
  * Ctrl+Shift+K for the global chat, Ctrl+Shift+J for the project one — both
  * reachable while the terminal has focus.
  */
-export default function ChatPanel({ projectId }: Props) {
+export default function ChatPanel({ projectId, provider }: Props) {
   const drawer = useDrawer(projectId ? 'project' : 'claude')
   const [status, setStatus] = useState<ChatStatus | null>(null)
-  const [engine, setEngine] = useState<ChatEngine>('claude')
+  const [localEngine, setLocalEngine] = useState<ChatEngine>('claude')
   const [model, setModel] = useState('')
+  const engine = provider ?? localEngine
 
   // Names the Claude conversation; a fresh id starts a fresh one.
   const sessionRef = useRef(crypto.randomUUID())
@@ -60,8 +62,8 @@ export default function ChatPanel({ projectId }: Props) {
 
   function switchEngine(next: ChatEngine) {
     if (next === engine || chat.streaming) return
-    setEngine(next)
-    // The two CLIs cannot read each other's history, so the thread starts over.
+    setLocalEngine(next)
+    // Providers cannot read each other's history, so the thread starts over.
     reset()
   }
 
@@ -75,7 +77,9 @@ export default function ChatPanel({ projectId }: Props) {
       hint={
         <>
           {projectId
-            ? `Разговор про проект «${projectId}» — модель читает его файлы, но не меняет.`
+            ? engine === 'gemini'
+              ? `Разговор про проект «${projectId}» — Gemini отвечает без доступа к его файлам.`
+              : `Разговор про проект «${projectId}» — модель читает его файлы, но не меняет.`
             : 'Просто разговор, без инструментов и без проекта.'}
           <br />
           Enter — отправить, Shift+Enter — перенос строки.
@@ -83,18 +87,20 @@ export default function ChatPanel({ projectId }: Props) {
       }
       headerActions={
         <>
-          <div className="chat-engines">
-            {ENGINES.map(({ id, label }) => (
-              <button
-                key={id}
-                className={`chat-engine ${engine === id ? 'chat-engine-on' : ''}`}
-                onClick={() => switchEngine(id)}
-                disabled={chat.streaming}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
+          {!provider && (
+            <div className="chat-engines">
+              {ENGINES.map(({ id, label }) => (
+                <button
+                  key={id}
+                  className={`chat-engine ${engine === id ? 'chat-engine-on' : ''}`}
+                  onClick={() => switchEngine(id)}
+                  disabled={chat.streaming}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          )}
           {engine === 'claude' && (
             <select
               className="chat-model"
