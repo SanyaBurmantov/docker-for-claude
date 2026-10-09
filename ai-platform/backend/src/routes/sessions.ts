@@ -1,3 +1,4 @@
+import { ensureLauncher, selectedToken, LAUNCHER } from '../services/claudeTokens';
 import { randomUUID } from 'crypto';
 import { Router, type Request, type Response } from 'express';
 import { execInContainer, listTmuxSessions, pasteIntoSession, tmuxSessionName } from '../services/dockerService';
@@ -59,7 +60,11 @@ router.post('/start', async (req: Request<{ id: string }>, res: Response) => {
     // Resuming by id, not by the bare continue flag: that flag reopens whatever
     // ran last in the project, which may be a one-shot helper query. So the
     // conversation gets named up front and the id is recorded below.
-    let agentCmd = spec.bin;
+    let agentCmd: string = spec.bin;
+    if (agentId === 'claude') {
+      await ensureLauncher();
+      agentCmd = `${LAUNCHER} ${await selectedToken(projectName)}`;
+    }
     let sessionId: string | null = null;
 
     if (spec.sessionIdFlag && spec.resumeFlag) {
@@ -98,7 +103,7 @@ router.post('/start', async (req: Request<{ id: string }>, res: Response) => {
 
     // Only Claude can be told its conversation id, so only its sessions record one.
     // `agent` stays the last one started here — the dashboard opens the project with it.
-    if (started) await update(projectName, { agent: agentId, sessionId }).catch(() => {});
+    if (started) await update(projectName, { agent: agentId, ...(agentId === 'claude' ? { sessionId } : {}) }).catch(() => {});
     res.json({ sessionId: sessionName, status: 'started', running: true, agent: agentId });
   } catch (err) {
     res.status(500).json({ error: String(err) });

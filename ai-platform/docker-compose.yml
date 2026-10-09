@@ -107,6 +107,7 @@ services:
       # Favourites, last-opened times and the agent picked per project. Not part
       # of any project, so it must not live in PROJECTS_DIR.
       - platform-data:/data
+      - ./claude-token-imports:/run/claude-token-imports:ro
       # Same volume the agent container mounts read-only, so a path the UI shows is
       # a path the agent can open.
       - screenshots:/data/screenshots

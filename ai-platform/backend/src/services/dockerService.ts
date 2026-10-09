@@ -16,13 +16,16 @@ export const UTF8_EXEC_ENV = ['-e', 'LANG=C.UTF-8', '-e', 'LC_ALL=C.UTF-8'];
 export const EXEC_USER = process.env.CONTAINER_USER || 'claude';
 export const EXEC_USER_ARGS = ['-u', EXEC_USER];
 
-export async function execInContainer(containerName: string, cmd: string): Promise<string> {
+export async function execInContainer(containerName: string, cmd: string, input?: string): Promise<string> {
   return new Promise((resolve, reject) => {
     const child = spawn(
       'docker',
-      ['exec', ...EXEC_USER_ARGS, ...UTF8_EXEC_ENV, containerName, 'bash', '-c', cmd],
+      ['exec', ...(input === undefined ? [] : ['-i']), ...EXEC_USER_ARGS, ...UTF8_EXEC_ENV, containerName, 'bash', '-c', cmd],
       { stdio: ['pipe', 'pipe', 'pipe'] }
     );
+
+    child.stdin.on('error', reject);
+    child.stdin.end(input);
 
     // Chunk boundaries land on arbitrary byte offsets, so decoding each chunk on its
     // own tears multi-byte characters in half and yields U+FFFD. Decode once, at the end.

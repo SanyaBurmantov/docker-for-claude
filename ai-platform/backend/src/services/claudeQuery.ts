@@ -1,3 +1,4 @@
+import { ensureLauncher, selectedToken, LAUNCHER } from './claudeTokens';
 import { spawn } from 'child_process';
 import { UTF8_EXEC_ENV, EXEC_USER_ARGS } from './dockerService';
 
@@ -48,6 +49,21 @@ interface StreamEvent {
  * Returns a cancel function; handlers fire at most one of onError/onDone.
  */
 export function streamClaude(query: ClaudeQuery, handlers: ClaudeHandlers): () => void {
+  let cancelled = false;
+  let cancel = () => {};
+  void (async () => {
+    try {
+      await ensureLauncher();
+      const tokenId = await selectedToken(query.projectName);
+      if (!cancelled) cancel = runClaude(query, handlers, tokenId);
+    } catch {
+      if (!cancelled) handlers.onError('Cannot load Claude authentication');
+    }
+  })();
+  return () => { cancelled = true; cancel(); };
+}
+
+function runClaude(query: ClaudeQuery, handlers: ClaudeHandlers, tokenId: string): () => void {
   const toolFlag = query.allowedTools ? '--allowedTools' : '--disallowedTools';
   const toolList = query.allowedTools ?? query.disallowedTools ?? NO_TOOLS;
 
@@ -65,7 +81,8 @@ export function streamClaude(query: ClaudeQuery, handlers: ClaudeHandlers): () =
     query.projectName ? `/workspace/${query.projectName}` : '/workspace',
     ...UTF8_EXEC_ENV,
     CONTAINER_NAME,
-    'claude',
+    LAUNCHER,
+    tokenId,
     '-p',
     '--output-format',
     'stream-json',

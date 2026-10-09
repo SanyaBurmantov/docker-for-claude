@@ -1,3 +1,4 @@
+import ClaudeTokenButton from './ClaudeTokenButton'
 import { useEffect, useRef, useState } from 'react'
 import ChatDrawer from './ChatDrawer'
 import {
@@ -155,6 +156,7 @@ export default function ChatPanel({ projectId, provider }: Props) {
               ))}
             </select>
           )}
+          {engine === 'claude' && <ClaudeTokenButton projectId={projectId} disabled={chat.streaming} />}
           {!projectId && engine === 'gemini' && (
             <select
               className="chat-model"

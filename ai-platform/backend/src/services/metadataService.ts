@@ -11,6 +11,7 @@ const FILE = path.join(DATA_DIR, 'projects.json');
 
 export interface ProjectMeta {
   favorite: boolean;
+  claudeTokenId?: string;
   /** ISO timestamp of the last time the project page was opened. */
   lastOpened: string | null;
   /** Agent the last session was started with. */
@@ -42,6 +43,7 @@ function normalize(raw: unknown): MetaStore {
     const entry = value as Partial<ProjectMeta>;
     store[name] = {
       favorite: entry.favorite === true,
+      claudeTokenId: typeof entry.claudeTokenId === 'string' ? entry.claudeTokenId : undefined,
       lastOpened: typeof entry.lastOpened === 'string' ? entry.lastOpened : null,
       agent: typeof entry.agent === 'string' ? entry.agent : null,
       sessionId: typeof entry.sessionId === 'string' ? entry.sessionId : null,

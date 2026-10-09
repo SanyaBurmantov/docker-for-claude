@@ -1,3 +1,4 @@
+import ClaudeTokenButton from '../components/ClaudeTokenButton'
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useParams, Link, useSearchParams } from 'react-router-dom'
 import {
@@ -84,6 +85,7 @@ export default function ProjectPage() {
   const [running, setRunning] = useState<Partial<Record<AgentId, boolean>>>({})
   /** Последняя открытая вкладка агента: к ней относятся скриншоты и «обсудить» из чеклистов. */
   const [lastAgent, setLastAgent] = useState<AgentId>(DEFAULT_AGENT)
+  const [claudeTerminalVersion, setClaudeTerminalVersion] = useState(0)
   const [generatingMessage, setGeneratingMessage] = useState(false)
   const [aiProvider, setAiProvider] = useState<AiProvider>(() => {
     if (isAiProvider(activeTab)) return activeTab
@@ -183,6 +185,16 @@ export default function ProjectPage() {
       // Контейнер недоступен — пусть на вкладках останется последнее известное
     }
   }, [id])
+
+  useEffect(() => {
+    function tokenChanged(event: Event) {
+      if ((event as CustomEvent<{ projectId?: string; restarted?: boolean }>).detail?.projectId !== id) return
+      if ((event as CustomEvent<{ restarted?: boolean }>).detail?.restarted) setClaudeTerminalVersion(v => v + 1)
+      void refreshSessions()
+    }
+    window.addEventListener('claude-token-changed', tokenChanged)
+    return () => window.removeEventListener('claude-token-changed', tokenChanged)
+  }, [id, refreshSessions])
 
   // Агент мог завершиться сам, пока вкладка была в фоне.
   useEffect(() => {
@@ -600,6 +612,9 @@ export default function ProjectPage() {
           onChange={selectAiProvider}
           disabled={generatingMessage || reviewing || dayLogLoading}
         />
+        {aiProvider === 'claude' && <ClaudeTokenButton projectId={id}
+          disabled={startingAgent === 'claude' || generatingMessage || reviewing || dayLogLoading}
+          onSwitch={() => { void refreshSessions() }} />}
       </div>
       <div className="project-toolbar-right">
         {id && (
@@ -647,6 +662,7 @@ export default function ProjectPage() {
           return (
             <div key={agent} style={{ display: activeTab === agent ? undefined : 'none' }}>
               <TerminalComponent
+                key={agent === 'claude' ? claudeTerminalVersion : agent}
                 sessionId={live && id ? `${agent}-${id}` : null}
                 projectId={id}
                 label={label}

@@ -1,4 +1,6 @@
 import express from 'express';
+import claudeTokensRouter from './routes/claudeTokens';
+import { startClaudeTokenAutoSave } from './services/claudeTokenAutoSave';
 import cors from 'cors';
 import morgan from 'morgan';
 import http from 'http';
@@ -35,6 +37,7 @@ app.use('/api/projects/:id/commit-message', commitMessageRouter);
 app.use('/api/projects/:id/screenshots', screenshotsRouter);
 app.use('/api/projects/:id/chat', chatRouter);
 app.use('/api/system', systemRouter);
+app.use('/api/claude/tokens', claudeTokensRouter);
 app.use('/api/gemini', geminiRouter);
 app.use('/api/pane', paneRouter);
 app.use('/api/claude/chat', chatRouter);
@@ -63,6 +66,8 @@ wss.on('connection', (ws: WebSocket, req) => {
 });
 
 claudeEvents.start();
+const stopTokenAutoSave = startClaudeTokenAutoSave();
+server.on('close', stopTokenAutoSave);
 
 server.listen(PORT, () => {
   console.log(`AI Platform backend listening on port ${PORT}`);

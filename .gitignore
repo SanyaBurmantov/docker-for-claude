@@ -4,3 +4,6 @@ dist/
 .env
 .idea/
 .claude/
+
+# Local Claude credentials queued for import; never commit secrets.
+ai-platform/claude-token-imports/

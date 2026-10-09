@@ -87,6 +87,17 @@ async function request<T>(url: string, options?: RequestInit): Promise<T> {
   return res.text() as T
 }
 
+/** `request` packs the response body into its message; routes that answer with a
+ *  sentence for the user are read back out of it instead of a generic failure. */
+export function errorMessage(err: unknown, fallback: string): string {
+  const body = /\{[\s\S]*\}/.exec(err instanceof Error ? err.message : '')
+  if (!body) return fallback
+  try {
+    const parsed = JSON.parse(body[0]) as { error?: unknown }
+    return typeof parsed.error === 'string' && parsed.error ? parsed.error : fallback
+  } catch { return fallback }
+}
+
 export function fetchProjects(): Promise<Project[]> {
   return request<Project[]>('/api/projects')
 }
@@ -606,4 +617,54 @@ export function attachScreenshots(id: string, names: string[], agent: AgentId): 
 
 export function screenshotUrl(id: string, name: string): string {
   return `/api/projects/${id}/screenshots/${encodeURIComponent(name)}/raw`
+}
+
+export interface ClaudeToken {
+  id: string
+  name: string
+  /** Email of the signed-in account, when Claude has recorded one. */
+  account: string | null
+  /** False while a profile is still waiting for its first login. */
+  hasLogin: boolean
+}
+export interface ClaudeTokenList {
+  tokens: ClaudeToken[]
+  selected: string
+  /** The project shows the global account because it has none of its own. */
+  inherited: boolean
+}
+/** Which Claude sessions had to be restarted to pick the account up, by project. */
+export interface ClaudeTokenSwitch { selected: string; inherited: boolean; restarted: string[] }
+
+function claudeTokensUrl(projectId?: string): string {
+  return `/api/claude/tokens${projectId ? `?project=${encodeURIComponent(projectId)}` : ''}`
+}
+export function fetchClaudeTokens(projectId?: string): Promise<ClaudeTokenList> {
+  return request(claudeTokensUrl(projectId))
+}
+export function addClaudeToken(name: string, token: string): Promise<{ tokens: ClaudeToken[] }> {
+  return request('/api/claude/tokens', { method: 'POST', body: JSON.stringify({ name, token }) })
+}
+export function renameClaudeToken(id: string, name: string): Promise<{ tokens: ClaudeToken[] }> {
+  return request(`/api/claude/tokens/${id}`, { method: 'PATCH', body: JSON.stringify({ name }) })
+}
+export function deleteClaudeToken(id: string): Promise<{ tokens: ClaudeToken[]; restarted: string[] }> {
+  return request(`/api/claude/tokens/${id}`, { method: 'DELETE' })
+}
+export function saveCurrentClaudeLogin(projectId?: string): Promise<{ tokens: ClaudeToken[] }> {
+  const url = `/api/claude/tokens/capture${projectId ? `?project=${encodeURIComponent(projectId)}` : ''}`
+  return request(url, { method: 'POST' })
+}
+/** Opens a terminal session where a credential-less Claude runs its login flow. */
+export function startClaudeLogin(name: string): Promise<{ id: string; session: string; tokens: ClaudeToken[] }> {
+  return request('/api/claude/tokens/login', { method: 'POST', body: JSON.stringify({ name }) })
+}
+/** Closes that window; an account that never signed in is dropped with it. */
+export function closeClaudeLogin(id: string): Promise<{ tokens: ClaudeToken[] }> {
+  return request(`/api/claude/tokens/login/${id}`, { method: 'DELETE' })
+}
+/** `id` null hands the project back to the global account. */
+export function selectClaudeToken(id: string | null, projectId?: string): Promise<ClaudeTokenSwitch> {
+  const url = `/api/claude/tokens/selected${projectId ? `?project=${encodeURIComponent(projectId)}` : ''}`
+  return request(url, { method: 'PUT', body: JSON.stringify(id === null ? { inherit: true } : { id }) })
 }

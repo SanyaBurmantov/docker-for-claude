@@ -3011,3 +3011,17 @@ body:has(.drawer-open) .drawer-tab:not(.drawer-tab-open) {
 .tab .status-indicator {
   margin-right: 6px;
 }
+
+.claude-token-form { display: grid; gap: 14px; }
+.claude-token-form .form-field { margin: 0; }
+.claude-token-form select, .claude-token-form textarea {
+  width: 100%; padding: 10px 12px; border: 1px solid var(--line-strong);
+  border-radius: 6px; background: var(--bg-2); color: var(--text);
+  font: inherit;
+}
+.claude-token-secret { -webkit-text-security: disc; resize: vertical; }
+.claude-token-hint { color: var(--text-dim); font-size: 13px; line-height: 1.5; }
+.claude-token-error { color: var(--danger, #f87171); }
+/* Вход в новый аккаунт идёт в настоящем терминале — в модалке он ниже обычного. */
+.claude-login .terminal-container { height: 320px; }
+.claude-login .terminal-wrap { display: grid; gap: 6px; }

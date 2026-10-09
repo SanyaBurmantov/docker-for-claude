@@ -1,6 +1,7 @@
 import { tmuxSessionName } from './dockerService';
 import { isValidProjectName } from './projectService';
 import { AGENT_IDS } from './agents';
+import { LOGIN_SESSION_PREFIX, TOKEN_ID } from './claudeTokens';
 
 /**
  * What a terminal id points at. Both tabs of a project — the agent one and the shell
@@ -21,6 +22,14 @@ export interface PaneTarget {
  * connects to and the session the API starts are the same string.
  */
 export function paneTarget(sessionId: string): PaneTarget | null {
+  // Signing a new account in is not a project: a throwaway session started by the
+  // tokens API, where a credential-less Claude runs its own login flow.
+  if (sessionId.startsWith(LOGIN_SESSION_PREFIX)) {
+    const id = sessionId.slice(LOGIN_SESSION_PREFIX.length);
+    if (id === 'default' || !TOKEN_ID.test(id)) return null;
+    return { session: sessionId, cwd: '/workspace', create: false };
+  }
+
   const prefixes = [...AGENT_IDS, 'shell'];
   const prefix = prefixes.find((p) => sessionId.startsWith(`${p}-`));
   if (!prefix) return null;
