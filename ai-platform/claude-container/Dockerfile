@@ -52,6 +52,15 @@ RUN if id ubuntu >/dev/null 2>&1; then userdel -r ubuntu; fi && \
     usermod -aG sudo claude && \
     echo "claude ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
 
+# Playwright WebKit with its system libraries, so an agent can check a layout as
+# Safari on iPhone renders it. The browser lives outside $HOME, where a rebuild
+# would not bring it back. Owned by `claude` so a project pinned to another
+# Playwright version can download its own build next to it.
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+RUN npx -y playwright@1.64.1 install --with-deps webkit && \
+    chown -R ${HOST_UID}:${HOST_GID} /ms-playwright && \
+    rm -rf /var/lib/apt/lists/* /root/.npm
+
 # Default opencode config with DashScope/Qwen provider. Lives in the image so that
 # the first `docker compose up` initialises the empty `opencode-config` volume with it.
 RUN mkdir -p /home/claude/.config/opencode
