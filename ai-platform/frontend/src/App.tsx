@@ -7,6 +7,7 @@ import ChatPanel from './components/ChatPanel'
 import Clock from './components/Clock'
 import SoundToggle from './components/SoundToggle'
 import LanguageSelector from './components/LanguageSelector'
+import AppearanceSettings from './components/AppearanceSettings'
 import SiteFooter from './components/SiteFooter'
 import { novncUrl } from './services/api'
 import { useLanguage } from './i18n'
@@ -28,6 +29,7 @@ function App() {
           <a href={novncUrl()} className="nav-link" target="_blank" rel="noopener noreferrer">noVNC</a>
           <Link to="/vc" className="nav-link">VC</Link>
           <SoundToggle />
+          <AppearanceSettings />
           <LanguageSelector />
           <Clock />
         </div>

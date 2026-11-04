@@ -7,9 +7,10 @@ import { useWebSocket } from '../hooks/useWebSocket'
 import { capturePane, getTmuxBuffer, scrollPane } from '../services/api'
 import { copyText } from '../services/clipboard'
 import { useLanguage } from '../i18n'
+import { terminalTheme, useAppearance } from '../appearance'
 import 'xterm/css/xterm.css'
 
-/** Подсветка всех совпадений + отметки на overview ruler; цвета — из темы терминала ниже. */
+/** Подсветка всех совпадений + отметки на overview ruler; цвета — в тон стандартной теме терминала. */
 const SEARCH_OPTIONS = {
   decorations: {
     matchBackground: '#1d4a63',
@@ -49,6 +50,7 @@ export default function Terminal({
   searchExtra,
 }: TerminalProps) {
   const { t } = useLanguage()
+  const { appearance } = useAppearance()
   const containerRef = useRef<HTMLDivElement>(null)
   const xtermRef = useRef<XTerm | null>(null)
   const fitAddonRef = useRef<FitAddon | null>(null)
@@ -80,29 +82,7 @@ export default function Terminal({
     if (!containerRef.current) return
 
     const term = new XTerm({
-      theme: {
-        background: '#04070e',
-        foreground: '#c9e4f6',
-        cursor: '#00f0ff',
-        cursorAccent: '#04070e',
-        selectionBackground: 'rgba(0, 240, 255, 0.3)',
-        black: '#0d1222',
-        red: '#ff3b5c',
-        green: '#2bff88',
-        yellow: '#e8b04b',
-        blue: '#4d9fff',
-        magenta: '#ff2ec4',
-        cyan: '#00f0ff',
-        white: '#d5e5f5',
-        brightBlack: '#4a5875',
-        brightRed: '#ff7591',
-        brightGreen: '#7dffb6',
-        brightYellow: '#ffd28a',
-        brightBlue: '#8ec2ff',
-        brightMagenta: '#ff7ad9',
-        brightCyan: '#7ff8ff',
-        brightWhite: '#f2faff',
-      },
+      theme: terminalTheme(appearance),
       cursorBlink: true,
       fontSize,
       fontFamily: "'JetBrains Mono', 'Consolas', 'Monaco', 'Courier New', monospace",
@@ -228,6 +208,10 @@ export default function Terminal({
     fitAddonRef.current?.fit()
     localStorage.setItem('terminal-font-size', String(fontSize))
   }, [fontSize])
+
+  useEffect(() => {
+    if (xtermRef.current) xtermRef.current.options.theme = terminalTheme(appearance)
+  }, [appearance])
 
   async function pullTmuxBuffer() {
     if (!projectId) return

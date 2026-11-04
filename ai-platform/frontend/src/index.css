@@ -25,13 +25,14 @@
   --text-faint: #4a5875;
 
   /* Lines & glows */
-  --line: rgba(0, 240, 255, 0.14);
-  --line-strong: rgba(0, 240, 255, 0.35);
-  --glow-cyan: 0 0 14px rgba(0, 240, 255, 0.28);
-  --glow-magenta: 0 0 14px rgba(255, 46, 196, 0.3);
-  --glow-green: 0 0 12px rgba(43, 255, 136, 0.3);
-  --glow-red: 0 0 12px rgba(255, 59, 92, 0.3);
-  --glow-brass: 0 0 12px rgba(232, 176, 75, 0.3);
+  /* Через color-mix — чтобы линии и свечение шли за цветом, выбранным в «Оформлении» */
+  --line: color-mix(in srgb, var(--cyan) 14%, transparent);
+  --line-strong: color-mix(in srgb, var(--cyan) 35%, transparent);
+  --glow-cyan: 0 0 14px color-mix(in srgb, var(--cyan) 28%, transparent);
+  --glow-magenta: 0 0 14px color-mix(in srgb, var(--magenta) 30%, transparent);
+  --glow-green: 0 0 12px color-mix(in srgb, var(--green) 30%, transparent);
+  --glow-red: 0 0 12px color-mix(in srgb, var(--red) 30%, transparent);
+  --glow-brass: 0 0 12px color-mix(in srgb, var(--brass) 30%, transparent);
 
   /* Height of one drawer tab on the screen edge — also the step between them. */
   --tab-height: 118px;
@@ -158,7 +159,7 @@ button {
   align-items: center;
   justify-content: space-between;
   padding: 14px 28px;
-  background: rgba(9, 12, 24, 0.82);
+  background: color-mix(in srgb, var(--bg-1) 82%, transparent);
   backdrop-filter: blur(10px);
   border-bottom: 1px solid var(--line);
   position: sticky;
@@ -672,7 +673,8 @@ button.nav-link {
   height: 520px;
   overflow: hidden;
   border: 1px solid var(--line-strong);
-  background: var(--bg-terminal);
+  /* Картинка из «Оформления» — под xterm, его фон в этом случае полупрозрачный */
+  background: var(--terminal-image, none) center / cover no-repeat, var(--bg-terminal);
   box-shadow: inset 0 0 40px rgba(0, 240, 255, 0.04), 0 0 24px rgba(0, 0, 0, 0.5);
   position: relative;
 }
@@ -3025,3 +3027,131 @@ body:has(.drawer-open) .drawer-tab:not(.drawer-tab-open) {
 /* Вход в новый аккаунт идёт в настоящем терминале — в модалке он ниже обычного. */
 .claude-login .terminal-container { height: 320px; }
 .claude-login .terminal-wrap { display: grid; gap: 6px; }
+
+/* ============ APPEARANCE ============ */
+
+.appearance-form {
+  display: grid;
+  gap: 18px;
+  max-height: 75vh;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.appearance-preview {
+  position: relative;
+  border: 1px solid var(--line-strong);
+  background: var(--terminal-image, none) center / cover no-repeat, var(--bg-terminal);
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  min-height: 110px;
+}
+
+.appearance-preview-tint {
+  position: absolute;
+  inset: 0;
+}
+
+.appearance-preview-text {
+  position: relative;
+  display: grid;
+  gap: 6px;
+  padding: 14px;
+}
+
+.appearance-preview-cursor {
+  display: inline-block;
+  width: 0.6em;
+  height: 1.1em;
+  margin-left: 4px;
+  vertical-align: text-bottom;
+}
+
+.appearance-section {
+  display: grid;
+  gap: 10px;
+}
+
+.appearance-section h4 {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.appearance-section > .btn {
+  justify-self: start;
+}
+
+.appearance-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.appearance-url {
+  flex: 1;
+  min-width: 180px;
+  padding: 6px 10px;
+  background: var(--bg-0);
+  border: 1px solid var(--line);
+  color: var(--text);
+  font-family: var(--font-ui);
+}
+
+.appearance-url:focus {
+  outline: none;
+  border-color: var(--cyan);
+}
+
+.appearance-slider input {
+  flex: 1;
+  accent-color: var(--cyan);
+}
+
+.appearance-value {
+  min-width: 3em;
+  text-align: right;
+  font-family: var(--font-mono);
+  color: var(--text-dim);
+}
+
+.appearance-hint {
+  font-size: 0.78rem;
+  color: var(--text-faint);
+}
+
+.appearance-error {
+  color: var(--red);
+}
+
+.appearance-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 8px 16px;
+}
+
+.appearance-color-field {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.appearance-ansi {
+  display: grid;
+  grid-template-columns: repeat(8, 36px);
+  gap: 6px;
+}
+
+.appearance-color {
+  width: 36px;
+  height: 28px;
+  padding: 2px;
+  background: var(--bg-0);
+  border: 1px solid var(--line);
+  cursor: pointer;
+}
